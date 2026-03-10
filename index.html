@@ -590,6 +590,7 @@
   <button class="tab-btn" onclick="switchTab('income')" id="tab-income">💰 입금기록</button>
   <button class="tab-btn" onclick="switchTab('expense')" id="tab-expense">📤 지출입력</button>
   <button class="tab-btn" onclick="switchTab('csv')" id="tab-csv">📂 CSV</button>
+  <button class="tab-btn" onclick="switchTab('audit')" id="tab-audit">📋 감사보고서</button>
   <button class="tab-btn" onclick="switchTab('assoc')" id="tab-assoc">🏅 협회비</button>
   <button class="tab-btn" onclick="switchTab('members')" id="tab-members">👥 회원현황</button>
   <button class="tab-btn" onclick="switchTab('report')" id="tab-report">📊 리포트</button>
@@ -848,6 +849,58 @@
     </div>
   </div>
 
+  <!-- ━━━━━━━━━━━━━━━ 감사보고서 (관리자 전용) ━━━━━━━━━━━━━━━ -->
+  <div class="section" id="sec-audit">
+    <div class="section-header">
+      <div>
+        <div class="section-title">📋 감사보고서 내보내기</div>
+        <div class="section-sub">구글 시트 템플릿에 붙여넣을 데이터를 복사합니다</div>
+      </div>
+    </div>
+
+    <!-- 월 선택 -->
+    <div class="card">
+      <div class="card-title">📅 대상 월 선택</div>
+      <select id="auditMonthSel" style="width:100%;background:var(--card-bg);color:var(--text-main);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:14px;margin-top:4px;" onchange="renderAuditPreview()"></select>
+    </div>
+
+    <!-- 재무현황 미리보기 -->
+    <div class="card">
+      <div class="card-title">💰 재무현황 미리보기</div>
+      <div id="auditPreview" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- 구글 시트 붙여넣기 안내 -->
+    <div class="card" style="background:#1a2e1a;border:1px solid var(--green-dark);">
+      <div class="card-title" style="color:var(--green-bright);">📌 구글 시트 붙여넣기 방법</div>
+      <div style="font-size:12px;color:var(--text-dim);line-height:2;margin-top:6px;">
+        <div>① <b style="color:#fff;">💰 재무현황 복사</b> → 구글시트 <b style="color:#52b788;">C11 셀</b> 클릭 → Ctrl+V</div>
+        <div>② <b style="color:#fff;">📝 세부사항 복사</b> → 구글시트 <b style="color:#52b788;">C18 셀</b> 클릭 → Ctrl+V</div>
+        <div>③ <b style="color:#fff;">📄 세부내역 복사</b> → 구글시트 <b style="color:#52b788;">D18 셀</b> 클릭 → Ctrl+V</div>
+        <div style="margin-top:4px;padding:6px 8px;background:rgba(82,183,136,.08);border-radius:6px;color:var(--text-muted);font-size:11px;">
+          💡 잔액(E열)과 총계 행은 구글시트 수식이 자동 계산해요
+        </div>
+      </div>
+    </div>
+
+    <!-- 복사 버튼 -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+      <button onclick="copyAuditSection('finance')" style="background:var(--green-dark);color:#fff;border:none;border-radius:12px;padding:14px 0;font-size:13px;font-weight:600;cursor:pointer;">
+        💰 재무현황<br><span style="font-size:10px;font-weight:400;opacity:.8;">→ C11</span>
+      </button>
+      <button onclick="copyAuditSection('memo')" style="background:#1a3a2a;color:#fff;border:1px solid var(--green-dark);border-radius:12px;padding:14px 0;font-size:13px;font-weight:600;cursor:pointer;">
+        📝 세부사항<br><span style="font-size:10px;font-weight:400;opacity:.8;">→ C18</span>
+      </button>
+      <button onclick="copyAuditSection('detail')" style="background:#2D5016;color:#fff;border:none;border-radius:12px;padding:14px 0;font-size:13px;font-weight:600;cursor:pointer;">
+        📄 세부내역<br><span style="font-size:10px;font-weight:400;opacity:.8;">→ D18</span>
+      </button>
+    </div>
+    <button onclick="copyAuditSection('all')" style="width:100%;background:var(--green-bright);color:#0a0a0a;border:none;border-radius:12px;padding:14px 0;font-size:15px;font-weight:700;cursor:pointer;">
+      📋 전체 미리보기 복사 (재무현황 + 세부사항 + 세부내역)
+    </button>
+    <div id="auditCopyMsg" style="text-align:center;font-size:13px;color:var(--green-bright);margin-top:10px;min-height:20px;font-weight:600;"></div>
+  </div>
+
   <!-- ━━━━━━━━━━━━━━━ 회원 현황 ━━━━━━━━━━━━━━━ -->
   <div class="section" id="sec-members">
     <div class="section-header">
@@ -970,6 +1023,7 @@
         <div class="empty-state"><div class="empty-icon">📊</div><p>이달 내역이 없어요</p></div>
       </div>
     </div>
+
   </div>
 
 </div><!-- .main -->
@@ -1143,7 +1197,7 @@ const CURRENT_MONTH = String(new Date().getMonth() + 1);
 // ══════════════════════════════════════════
 function switchTab(tab) {
   // 관리자 전용 탭 접근 차단
-  const adminTabs = ['income','expense','csv'];
+  const adminTabs = ['income','expense','csv','audit'];
   if(adminTabs.includes(tab) && !isAdmin) {
     openPin(tab); return;
   }
@@ -1159,6 +1213,7 @@ function switchTab(tab) {
   if(tab==='expense') renderExpenseTx();
   if(tab==='assoc') renderAssoc();
   if(tab==='csv') renderCsvTab();
+  if(tab==='audit') initAuditMonthSel();
 }
 
 // ══════════════════════════════════════════
@@ -1604,6 +1659,329 @@ function catEmoji(cat) {
 }
 
 // ══════════════════════════════════════════
+//  감사보고서 내보내기 (2026 구글시트 양식 기준)
+//
+//  [재무현황] → C11 셀부터 붙여넣기
+//    행11: 회비    이월 / 수입 / 지출  (잔액 E열은 구글시트 수식 자동계산)
+//    행12: 셔틀콕  이월 / 수입 / 지출
+//    행13: 레슨비  이월 / 수입 / 지출
+//
+//  [세부내역] → C18 셀부터 붙여넣기
+//    행18: 회비        행19: 가입비     행20: 찬조금
+//    행21: 회원구매 셔틀콕  행22: 레슨비  행23: 예금이자
+//    행24: 운영비      행25: 행사비     행26: 코치 레슨비
+//    행27: 정수기 렌탈료   행28: 소득세&지방세
+// ══════════════════════════════════════════
+
+// 세부내역 고정 항목 (구글시트 행 순서와 정확히 일치)
+const AUDIT_DETAIL_ROWS = [
+  '회비', '가입비', '찬조금', '회원구매 셔틀콕',
+  '레슨비', '예금이자', '운영비', '행사비',
+  '코치 레슨비', '정수기 렌탈료', '소득세&지방세'
+];
+
+// 앱 카테고리 → 세부내역 항목 매핑
+const AUDIT_CAT_MAP = {
+  '회비':     '회비',
+  '입회비':   '가입비',
+  '찬조금':   '찬조금',
+  '단체복':   '찬조금',
+  '셔틀콕':   '회원구매 셔틀콕',
+  '레슨비':   '레슨비',
+  '캐시백':   '예금이자',
+  '이용료':   '운영비',
+  '비품':     '운영비',
+  '간식비':   '운영비',
+  '회식비':   '행사비',
+  '행사비':   '행사비',
+  '협회비':   '운영비',
+  '기타':     '운영비',
+};
+
+function initAuditMonthSel() {
+  const sel = document.getElementById('auditMonthSel');
+  if (!sel) return;
+  const allTxs = loadTx();
+  const months = [...new Set(allTxs.map(t => t.month))].sort().reverse();
+  if (months.length === 0) months.push(CURRENT_MONTH);
+  sel.innerHTML = months.map(m => `<option value="${m}"${m===CURRENT_MONTH?' selected':''}>${m}</option>`).join('');
+  sel.onchange = renderAuditPreview;
+  renderAuditPreview();
+}
+
+function getAuditData(month) {
+  const allTxs = loadTx().filter(t => t.month === month);
+
+  // 재무현황: 통장별 이월/수입/지출
+  const bankResult = {};
+  ['회비','셔틀콕','레슨비'].forEach(b => {
+    const btxs = allTxs.filter(t => t.bank === b);
+    const carryover = btxs.filter(t => t.memo === '이월').reduce((s,t) => s+t.amount, 0);
+    const income    = btxs.filter(t => t.type === 'income' && t.memo !== '이월').reduce((s,t) => s+t.amount, 0);
+    const expense   = btxs.filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0);
+    bankResult[b] = { carryover, income, expense, balance: carryover + income - expense };
+  });
+
+  // 세부내역: 고정 항목으로 매핑해서 집계
+  const detailIncome  = {};
+  const detailExpense = {};
+  AUDIT_DETAIL_ROWS.forEach(r => { detailIncome[r] = 0; detailExpense[r] = 0; });
+
+  allTxs.filter(t => t.memo !== '이월').forEach(t => {
+    const mapped = AUDIT_CAT_MAP[t.cat] || '운영비';
+    if (t.type === 'income')  detailIncome[mapped]  += t.amount;
+    if (t.type === 'expense') detailExpense[mapped] += t.amount;
+  });
+
+  // ── 세부사항(C열) 텍스트 자동 생성 ──
+  const memoText = {};
+
+  // 1. 회비: 이름만 나열 (숫자 제거) + 명수
+  const 회비txs = allTxs.filter(t => t.type === 'income' && AUDIT_CAT_MAP[t.cat] === '회비');
+  if (회비txs.length) {
+    const names = 회비txs.map(t => (t.name || '').replace(/\s*\(.*?\)/g, '').replace(/\d+/g, '').trim()).filter(Boolean);
+    memoText['회비'] = `${names.join(', ')} ${회비txs.length}명`;
+  }
+
+  // 2. 가입비: 이름만 나열 + 명수
+  const 가입비txs = allTxs.filter(t => t.type === 'income' && AUDIT_CAT_MAP[t.cat] === '가입비');
+  if (가입비txs.length) {
+    const names = 가입비txs.map(t => (t.name || '').replace(/\d+/g, '').trim()).filter(Boolean);
+    memoText['가입비'] = `${names.join(', ')} ${가입비txs.length}명`;
+  }
+
+  // 3. 찬조금: 낸 사람 이름 (숫자 제거)
+  const 찬조txs = allTxs.filter(t => t.type === 'income' && AUDIT_CAT_MAP[t.cat] === '찬조금');
+  if (찬조txs.length) {
+    memoText['찬조금'] = 찬조txs.map(t => (t.name || '').replace(/\d+/g, '').trim()).filter(Boolean).join(', ');
+  }
+
+  // 4. 셔틀콕: 이름(타수) + 타수 합계  ← name 필드: "이름 숫자" 형식
+  const 셔틀txs = allTxs.filter(t => t.type === 'income' && AUDIT_CAT_MAP[t.cat] === '회원구매 셔틀콕');
+  if (셔틀txs.length) {
+    const items = [];
+    let totalTa = 0;
+    셔틀txs.forEach(t => {
+      const raw = (t.name || '').trim();
+      const m = raw.match(/^(.+?)\s*(\d+)$/);
+      if (m) {
+        const name = m[1].trim();
+        const ta = parseInt(m[2]);
+        items.push(`${name}(${ta}타)`);
+        totalTa += ta;
+      } else {
+        items.push(raw);
+      }
+    });
+    memoText['회원구매 셔틀콕'] = `${items.join(', ')} / 합계 ${totalTa}타`;
+  }
+
+  // 5. 레슨비: 이름만 나열 (숫자 제거, 이월 제외) + 명수 + 이월 금액 표기
+  const 레슨txs = allTxs.filter(t => t.type === 'income' && AUDIT_CAT_MAP[t.cat] === '레슨비' && t.memo !== '이월');
+  const 레슨이월 = allTxs.filter(t => t.bank === '레슨비' && t.memo === '이월').reduce((s,t) => s+t.amount, 0);
+  if (레슨txs.length || 레슨이월) {
+    const names = 레슨txs.map(t => (t.name || '').replace(/\d+/g, '').trim()).filter(Boolean);
+    let text = '';
+    if (names.length) text += `${names.join(', ')} ${레슨txs.length}명`;
+    if (레슨이월) {
+      const carryStr = `${레슨이월.toLocaleString()}원 이월 포함`;
+      text = text ? `${text} (${carryStr})` : carryStr;
+    }
+    memoText['레슨비'] = text;
+  }
+
+  // 6. 운영비: 지출 name 원문 그대로 나열 (이용료·비품·간식비 등)
+  const 운영txs = allTxs.filter(t => t.type === 'expense' && AUDIT_CAT_MAP[t.cat] === '운영비');
+  if (운영txs.length) {
+    memoText['운영비'] = 운영txs.map(t => t.name || '').filter(Boolean).join(', ');
+  }
+
+  // 7. 행사비: 항목 원문 그대로 나열
+  const 행사txs = allTxs.filter(t => t.type === 'expense' && AUDIT_CAT_MAP[t.cat] === '행사비');
+  if (행사txs.length) {
+    memoText['행사비'] = 행사txs.map(t => t.name || '').filter(Boolean).join(', ');
+  }
+
+  // 8. 코치 레슨비: cat='레슨비'인 지출 항목 → name에서 숫자 추출
+  const 코치txs = allTxs.filter(t => t.type === 'expense' && t.cat === '레슨비');
+  if (코치txs.length) {
+    const raw = (코치txs[0].name || '');
+    const m = raw.match(/(\d+)명/);
+    memoText['코치 레슨비'] = m ? `${m[1]}명` : raw;
+  }
+
+  return { banks: bankResult, detailIncome, detailExpense, memoText };
+}
+
+function renderAuditPreview() {
+  const sel = document.getElementById('auditMonthSel');
+  if (!sel) return;
+  const month = sel.value;
+  const d = getAuditData(month);
+  const bk = d.banks;
+  const fmt = n => (n && n !== 0) ? n.toLocaleString() : '-';
+
+  const totalCarry   = ['회비','셔틀콕','레슨비'].reduce((s,b) => s + bk[b].carryover, 0);
+  const totalIncome  = ['회비','셔틀콕','레슨비'].reduce((s,b) => s + bk[b].income,    0);
+  const totalExpense = ['회비','셔틀콕','레슨비'].reduce((s,b) => s + bk[b].expense,   0);
+  const totalBalance = ['회비','셔틀콕','레슨비'].reduce((s,b) => s + bk[b].balance,   0);
+
+  // ── 재무현황 ──
+  let html = `
+  <div style="font-size:11px;color:var(--green-bright);font-weight:600;margin-bottom:4px;">
+    📊 재무현황 &nbsp;<span style="color:var(--text-dim);font-weight:400;">→ 구글시트 C11 셀부터 붙여넣기</span>
+  </div>
+  <div style="overflow-x:auto;margin-bottom:16px;">
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead>
+      <tr style="background:#1B4332;color:#fff;">
+        <th style="padding:6px 8px;text-align:center;">공종</th>
+        <th style="padding:6px 8px;text-align:right;">이월</th>
+        <th style="padding:6px 8px;text-align:right;">수입</th>
+        <th style="padding:6px 8px;text-align:right;">지출</th>
+        <th style="padding:6px 8px;text-align:right;color:#aaa;">잔액(자동)</th>
+      </tr>
+    </thead><tbody>`;
+
+  [['회비','💳'],['셔틀콕','🏸'],['레슨비','🏋️']].forEach(([b,e]) => {
+    const r = bk[b];
+    html += `<tr style="border-bottom:1px solid rgba(255,255,255,.06);">
+      <td style="padding:5px 8px;text-align:center;">${e} ${b}</td>
+      <td style="padding:5px 8px;text-align:right;color:#90e0ef;">${fmt(r.carryover)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#52b788;">${fmt(r.income)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#e76f51;">${fmt(r.expense)}</td>
+      <td style="padding:5px 8px;text-align:right;color:#666;">${fmt(r.balance)}</td>
+    </tr>`;
+  });
+
+  html += `<tr style="background:#2D6A4F;font-weight:700;">
+      <td style="padding:6px 8px;text-align:center;color:#fff;">총계</td>
+      <td style="padding:6px 8px;text-align:right;color:#fff;">${fmt(totalCarry)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#fff;">${fmt(totalIncome)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#fff;">${fmt(totalExpense)}</td>
+      <td style="padding:6px 8px;text-align:right;color:#aaa;">${fmt(totalBalance)}</td>
+    </tr></tbody></table></div>`;
+
+  // ── 세부내역 ──
+  html += `
+  <div style="font-size:11px;color:var(--green-bright);font-weight:600;margin-bottom:4px;">
+    📄 세부내역 &nbsp;<span style="color:var(--text-dim);font-weight:400;">→ 세부사항 C18 / 금액 D18 셀부터 붙여넣기</span>
+  </div>
+  <div style="overflow-x:auto;">
+  <table style="width:100%;border-collapse:collapse;font-size:12px;">
+    <thead>
+      <tr style="background:#1B4332;color:#fff;">
+        <th style="padding:6px 8px;text-align:center;width:22%;">과목</th>
+        <th style="padding:6px 8px;text-align:left;width:40%;">세부사항 (C열)</th>
+        <th style="padding:6px 8px;text-align:right;">수입 (D열)</th>
+        <th style="padding:6px 8px;text-align:right;">지출 (E열)</th>
+      </tr>
+    </thead><tbody>`;
+
+  let totalDIncome = 0, totalDExpense = 0;
+  AUDIT_DETAIL_ROWS.forEach((cat, i) => {
+    const inc = d.detailIncome[cat]  || 0;
+    const exp = d.detailExpense[cat] || 0;
+    const memo = d.memoText[cat] || '';
+    totalDIncome  += inc;
+    totalDExpense += exp;
+    const bg = i % 2 === 0 ? 'rgba(255,255,255,.03)' : 'transparent';
+    html += `<tr style="border-bottom:1px solid rgba(255,255,255,.04);background:${bg};">
+      <td style="padding:4px 8px;text-align:center;font-size:11px;">${cat}</td>
+      <td style="padding:4px 8px;font-size:10px;color:#aaa;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${memo}">${memo}</td>
+      <td style="padding:4px 8px;text-align:right;color:#52b788;">${inc ? inc.toLocaleString() : ''}</td>
+      <td style="padding:4px 8px;text-align:right;color:#e76f51;">${exp ? exp.toLocaleString() : ''}</td>
+    </tr>`;
+  });
+
+  html += `<tr style="background:#2D6A4F;font-weight:700;">
+      <td style="padding:6px 8px;text-align:center;color:#fff;">총계</td>
+      <td style="padding:6px 8px;color:#aaa;font-size:10px;"></td>
+      <td style="padding:6px 8px;text-align:right;color:#fff;">${totalDIncome ? totalDIncome.toLocaleString() : '0'}</td>
+      <td style="padding:6px 8px;text-align:right;color:#fff;">${totalDExpense ? totalDExpense.toLocaleString() : '0'}</td>
+    </tr></tbody></table></div>`;
+
+  document.getElementById('auditPreview').innerHTML = html;
+}
+
+function copyAuditSection(type) {
+  const sel = document.getElementById('auditMonthSel');
+  if (!sel) return;
+  const month = sel.value;
+  const d = getAuditData(month);
+  const bk = d.banks;
+  let lines = [];
+
+  if (type === 'finance') {
+    // C11 셀: 이월 / 수입 / 지출 (3열)
+    ['회비','셔틀콕','레슨비'].forEach(b => {
+      const r = bk[b];
+      lines.push(`${r.carryover || 0}\t${r.income || 0}\t${r.expense || 0}`);
+    });
+  }
+
+  if (type === 'memo') {
+    // C18 셀: 세부사항 텍스트만 (1열) - 행 순서 고정
+    AUDIT_DETAIL_ROWS.forEach(cat => {
+      lines.push(d.memoText[cat] || '');
+    });
+  }
+
+  if (type === 'detail') {
+    // D18 셀: 수입 / 지출 (2열) - 행 순서 고정
+    AUDIT_DETAIL_ROWS.forEach(cat => {
+      const inc = d.detailIncome[cat]  || 0;
+      const exp = d.detailExpense[cat] || 0;
+      lines.push(`${inc || ''}\t${exp || ''}`);
+    });
+  }
+
+  if (type === 'all') {
+    // 전체: 재무현황(C11) + 세부사항(C18) + 세부내역(D18) 안내만
+    lines.push('=== 재무현황 (C11 붙여넣기) ===');
+    ['회비','셔틀콕','레슨비'].forEach(b => {
+      const r = bk[b];
+      lines.push(`${r.carryover || 0}\t${r.income || 0}\t${r.expense || 0}`);
+    });
+    lines.push('');
+    lines.push('=== 세부사항 (C18 붙여넣기) ===');
+    AUDIT_DETAIL_ROWS.forEach(cat => {
+      lines.push(d.memoText[cat] || '');
+    });
+    lines.push('');
+    lines.push('=== 세부내역 수입/지출 (D18 붙여넣기) ===');
+    AUDIT_DETAIL_ROWS.forEach(cat => {
+      const inc = d.detailIncome[cat]  || 0;
+      const exp = d.detailExpense[cat] || 0;
+      lines.push(`${inc || ''}\t${exp || ''}`);
+    });
+  }
+
+  const text = lines.join('\n');
+  const msg = document.getElementById('auditCopyMsg');
+  const guides = {
+    finance: '구글시트 C11 셀 선택 후 Ctrl+V',
+    memo:    '구글시트 C18 셀 선택 후 Ctrl+V',
+    detail:  '구글시트 D18 셀 선택 후 Ctrl+V',
+    all:     '각 섹션 구분선 확인 후 C11 / C18 / D18에 각각 붙여넣기'
+  };
+  const labels = { finance:'재무현황', memo:'세부사항', detail:'세부내역', all:'전체' };
+
+  const showMsg = () => {
+    msg.innerHTML = `✅ ${labels[type]} 복사 완료!<br><span style="font-size:11px;color:var(--text-dim);">📌 ${guides[type]}</span>`;
+    setTimeout(() => { msg.innerHTML = ''; }, 4000);
+  };
+
+  navigator.clipboard.writeText(text).then(showMsg).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.cssText = 'position:fixed;opacity:0;';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); document.body.removeChild(ta);
+    showMsg();
+  });
+}
+
+// ══════════════════════════════════════════
 //  토스트
 // ══════════════════════════════════════════
 function showToast(msg) {
@@ -1619,7 +1997,7 @@ function showToast(msg) {
 const ADMIN_PIN = '1123'; // 재무 PIN
 
 function updateTabVisibility() {
-  const adminTabs = ['income','expense','csv'];
+  const adminTabs = ['income','expense','csv','audit'];
   adminTabs.forEach(t => {
     const el = document.getElementById('tab-' + t);
     if(el) el.style.display = isAdmin ? '' : 'none';
