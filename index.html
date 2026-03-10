@@ -925,6 +925,8 @@
         <div class="section-title">회원 현황</div>
         <div class="section-sub" id="memberCount"></div>
       </div>
+      <button id="btnAddMember" onclick="openAddMemberModal()"
+        style="display:none;background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer;">+ 회원 추가</button>
     </div>
 
     <input class="search-input" id="memberSearch" placeholder="🔍 이름 검색..." oninput="renderMembers()" />
@@ -933,17 +935,136 @@
 
     <div class="card" style="padding:0;overflow:hidden;">
       <div class="scroll-area">
-        <table class="member-table">
+        <table class="member-table" id="memberTable">
           <thead>
             <tr>
               <th>이름</th>
               <th>구분</th>
               <th>납입월</th>
               <th>회비</th>
+              <th class="admin-col" style="display:none;">성별</th>
+              <th class="admin-col" style="display:none;">연령대</th>
+              <th class="admin-col" style="display:none;">시급수</th>
+              <th class="admin-col" style="display:none;">구군급수</th>
+              <th class="admin-col" style="display:none;">생년월일</th>
+              <th class="admin-col" style="display:none;">가입일</th>
+              <th class="admin-col" style="display:none;">휴대폰</th>
+              <th class="admin-col" style="display:none;width:56px;"></th>
             </tr>
           </thead>
           <tbody id="memberTableBody"></tbody>
         </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━━━━━━━━━━━━━━ 회원 추가/수정 통합 모달 ━━━━━━━━━━━━━━━ -->
+  <div id="addMemberModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;overflow-y:auto;padding:20px;">
+    <div style="background:var(--card-bg);border-radius:16px;max-width:480px;margin:20px auto;padding:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <div id="modalTitle" style="font-size:17px;font-weight:700;color:var(--text-main);">👤 회원 추가</div>
+        <button onclick="closeAddMemberModal()" style="background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;">✕</button>
+      </div>
+      <!-- 수정모드일 때 원본이름 저장용 hidden -->
+      <input type="hidden" id="nm-edit-original" value="" />
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);font-weight:600;">이름 *</label>
+          <input id="nm-name" placeholder="홍길동" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;" />
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">구분 *</label>
+            <select id="nm-type" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+              <option value="정회원">정회원</option>
+              <option value="연간 정회원">연간 정회원</option>
+              <option value="가족회원">가족회원</option>
+              <option value="특별회원">특별회원</option>
+              <option value="준회원">준회원</option>
+              <option value="코치">코치</option>
+              <option value="활동대기">활동대기</option>
+              <option value="휴동">휴동</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">직책</label>
+            <input id="nm-role" placeholder="회장, 재무..." style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">회비금액</label>
+            <input id="nm-fee" type="number" placeholder="25000" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;" />
+          </div>
+          <div>
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">회비유형</label>
+            <select id="nm-feetype" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+              <option value="월회비">월회비</option>
+              <option value="연회비">연회비</option>
+            </select>
+          </div>
+        </div>
+        <div style="border-top:1px solid var(--border);padding-top:14px;">
+          <div style="font-size:12px;color:var(--green-bright);font-weight:600;margin-bottom:10px;">🔒 관리자 전용 정보</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">성별</label>
+              <select id="nm-gender" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+                <option value="">-</option><option>남</option><option>여</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">연령대</label>
+              <select id="nm-age" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+                <option value="">-</option>
+                <option>20~30</option><option>40</option><option>45</option>
+                <option>50</option><option>55</option><option>60</option><option>청소년</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">시급수</label>
+              <select id="nm-city" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+                <option value="">-</option>
+                <option>A</option><option>B</option><option>C</option><option>D</option><option>초심</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">구군급수</label>
+              <select id="nm-district" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;">
+                <option value="">-</option>
+                <option>A</option><option>B</option><option>C</option><option>D</option><option>초심</option>
+              </select>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">생년월일</label>
+              <input id="nm-birth" type="text" inputmode="numeric" placeholder="YYYYMMDD" maxlength="10"
+                style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;"
+                oninput="autoDateInput(this,'nm-joindate')" onkeydown="dateKeydown(event,this)" />
+            </div>
+            <div>
+              <label style="font-size:12px;color:var(--text-muted);font-weight:600;">가입일</label>
+              <input id="nm-joindate" type="text" inputmode="numeric" placeholder="YYYYMMDD" maxlength="10"
+                style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;"
+                oninput="autoDateInput(this,null)" onkeydown="dateKeydown(event,this)" />
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">휴대폰번호</label>
+            <input id="nm-phone" type="tel" inputmode="numeric" placeholder="010-0000-0000" maxlength="13"
+              style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;"
+              oninput="autoPhoneInput(this)" onkeydown="phoneKeydown(event,this)" onfocus="phoneFocus(this)" />
+          </div>
+          <div style="margin-top:10px;">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">비고</label>
+            <input id="nm-note" placeholder="가족관계, 특이사항 등" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;" />
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+          <button onclick="closeAddMemberModal()" style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;">취소</button>
+          <button id="modalSaveBtn" onclick="saveNewMember()" style="background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;">✅ 저장</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1083,81 +1204,81 @@ function saveBalance(obj) {
 // ══════════════════════════════════════════
 const MEMBERS = [
   // ── 정회원 (월회비) ──
-  { name: '유정환', type: '정회원', fee: 25000, months: ['1','2','3','4','5','6'], amount: 25000, role: '재무', 협회비: true },
-  { name: '홍윤정', type: '정회원', fee: 25000, months: ['1','2','3','4','5','6'], amount: 25000, role: '전무', 협회비: true },
-  { name: '이성화', type: '정회원', fee: 25000, months: ['1','2','3'], amount: 25000, role: '홍보', 협회비: true },
-  { name: '김영수', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: true },
-  { name: '최종진', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '최유석', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '양정규', type: '정회원', fee: 25000, months: ['1','2','3','4'], amount: 25000, role: '', 협회비: false },
-  { name: '성도영', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '경기', 협회비: false },
-  { name: '김현혜', type: '정회원', fee: 25000, months: ['3'], amount: 25000, role: '홍보', 협회비: false },
-  { name: '김형묵', type: '정회원', fee: 25000, months: ['1','2','3','4'], amount: 25000, role: '', 협회비: false },
-  { name: '장민주', type: '정회원', fee: 25000, months: ['1','2','3'], amount: 25000, role: '', 협회비: true },
-  { name: '이보미', type: '정회원', fee: 25000, months: ['2'], amount: 25000, role: '', 협회비: false },
-  { name: '김예원', type: '정회원', fee: 25000, months: ['1','2','3'], amount: 25000, role: '', 협회비: true },
-  { name: '김태동', type: '정회원', fee: 25000, months: ['2','3','4','5','6'], amount: 25000, role: '', 협회비: false },
-  { name: '노충호', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '노재술', type: '정회원', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '안순옥', type: '정회원', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '박경희', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '이우락', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '조재일', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '한현숙', type: '정회원', fee: 25000, months: ['1','2','3'], amount: 25000, role: '', 협회비: false },
-  { name: '박수빈', type: '정회원', fee: 25000, months: ['1','2','3'], amount: 25000, role: '', 협회비: false },
-  { name: '정시근 (홍명애)', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '', 협회비: false },
-  { name: '김용상', type: '정회원', fee: 25000, months: ['1','2'], amount: 25000, role: '기술', 협회비: false },
-  { name: '김용식 (황안순)', type: '정회원', fee: 20000, months: ['1','2','3'], amount: 20000, role: '', 협회비: false },
-  { name: '김갑선', type: '정회원', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  // ── 연간 정회원 (연납) ──
-  { name: '박한래', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '회장', 협회비: false },
-  { name: '곽미경', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '여부회장', 협회비: true },
-  { name: '지성근', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '감사', 협회비: true },
-  { name: '이창민', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '이지은', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '이승기', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '김기희', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '배원일', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '경기', 협회비: true },
-  { name: '황민환', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '이은희', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '유선준', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: false },
-  { name: '유영범', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '최윤정', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '김미영', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '정유상', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
-  { name: '김진상', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: false },
-  { name: '이정임 (박범규)', type: '연간 정회원', fee: 275000, months: ['연납'], amount: 275000, role: '', 협회비: true },
+  { name: '유정환',       type: '정회원',      fee: 25000, months: ['1','2','3','4','5','6'], amount: 25000, role: '재무',  협회비: true,  gender: '남', ageGroup: '45', cityRank: 'D', districtRank: 'D', birth: '1980-11-23', joinDate: '', phone: '010-2278-5879' },
+  { name: '홍윤정',       type: '정회원',      fee: 25000, months: ['1','2','3','4','5','6'], amount: 25000, role: '전무',  협회비: true,  gender: '여', ageGroup: '45', cityRank: 'A', districtRank: 'D', birth: '1980-03-25', joinDate: '', phone: '010-9329-7476' },
+  { name: '이성화',       type: '정회원',      fee: 25000, months: ['1','2','3'],             amount: 25000, role: '홍보',  협회비: true,  gender: '남', ageGroup: '50', cityRank: 'D', districtRank: 'D', birth: '1972-04-14', joinDate: '', phone: '010-8837-2039' },
+  { name: '김영수',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: true,  gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'C', birth: '1963-12-10', joinDate: '', phone: '010-5450-7273' },
+  { name: '최종진',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'D', districtRank: 'D', birth: '1965-11-23', joinDate: '', phone: '010-9937-6781' },
+  { name: '최유석',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'D', districtRank: 'D', birth: '1965-09-30', joinDate: '', phone: '010-3635-3796' },
+  { name: '양정규',       type: '정회원',      fee: 25000, months: ['1','2','3','4'],         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1970-12-11', joinDate: '', phone: '010-9401-0675' },
+  { name: '성도영',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '경기',  협회비: false, gender: '남', ageGroup: '20~30', cityRank: 'D', districtRank: 'D', birth: '1995-12-06', joinDate: '', phone: '010-2553-5096' },
+  { name: '김현혜',       type: '정회원',      fee: 25000, months: ['3'],                     amount: 25000, role: '홍보',  협회비: false, gender: '여', ageGroup: '40', cityRank: 'D', districtRank: 'D', birth: '1989-10-30', joinDate: '', phone: '010-5878-2412' },
+  { name: '김형묵',       type: '정회원',      fee: 25000, months: ['1','2','3','4'],         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'D', birth: '1965-07-19', joinDate: '', phone: '010-6418-1133' },
+  { name: '이보미',       type: '정회원',      fee: 25000, months: ['2'],                     amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1998-05-06', joinDate: '2026-01-28', phone: '010-9794-9234' },
+  { name: '김태동',       type: '정회원',      fee: 25000, months: ['2','3','4','5','6'],     amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '노충호',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1966-12-24', joinDate: '', phone: '010-4661-9465', note: '매월25입금' },
+  { name: '노재술',       type: '정회원',      fee: 25000, months: [],                       amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1968-05-25', joinDate: '', phone: '010-5855-6006', note: '군무원' },
+  { name: '안순옥',       type: '정회원',      fee: 25000, months: [],                       amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '60', cityRank: 'B', districtRank: 'D', birth: '1964-10-11', joinDate: '', phone: '010-5086-7000' },
+  { name: '박경희',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1968-11-16', joinDate: '', phone: '010-4935-9105' },
+  { name: '이우락',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '50', cityRank: 'A', districtRank: 'D', birth: '1974-05-28', joinDate: '', phone: '010-7454-0296' },
+  { name: '조재일',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1969-03-15', joinDate: '', phone: '010-7753-1278' },
+  { name: '한현숙',       type: '정회원',      fee: 25000, months: ['1','2','3'],             amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '50', cityRank: '초심', districtRank: '초심', birth: '1975-07-05', joinDate: '', phone: '010-8810-8589' },
+  { name: '박수빈',       type: '정회원',      fee: 25000, months: ['1','2','3'],             amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '40', cityRank: '초심', districtRank: '초심', birth: '1983-04-17', joinDate: '', phone: '010-5134-0079' },
+  { name: '정시근 (홍명애)', type: '정회원',   fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'C', districtRank: 'D', birth: '1966-08-05', joinDate: '', phone: '010-4102-0767', note: '3월부터 25000원' },
+  { name: '김용상',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '기술',  협회비: false, gender: '남', ageGroup: '60', cityRank: 'D', districtRank: 'D', birth: '1962-02-08', joinDate: '', phone: '010-8993-5670' },
+  { name: '김용식 (황안순)', type: '정회원',   fee: 20000, months: ['1','2','3'],             amount: 20000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1969-03-22', joinDate: '', phone: '010-7110-5980' },
+  { name: '김갑선',       type: '정회원',      fee: 25000, months: [],                       amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'D', birth: '1964-05-01', joinDate: '', phone: '010-6219-4830' },
+  { name: '장민주',       type: '정회원',      fee: 25000, months: ['1','2','3'],             amount: 25000, role: '',      협회비: true,  gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1998-06-04', joinDate: '', phone: '010-9127-7533' },
+  { name: '김예원',       type: '정회원',      fee: 25000, months: ['1','2','3'],             amount: 25000, role: '',      협회비: true,  gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1986-12-10', joinDate: '', phone: '010-8364-1210', note: '15일경 납부' },
+  // ── 연간 정회원 ──
+  { name: '박한래',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '회장',  협회비: false, gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'D', birth: '1964-12-20', joinDate: '', phone: '010-3282-1784' },
+  { name: '곽미경',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '여부회장', 협회비: true, gender: '여', ageGroup: '60', cityRank: 'A', districtRank: 'D', birth: '1965-06-25', joinDate: '', phone: '010-8818-8725' },
+  { name: '지성근',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '감사',  협회비: true,  gender: '남', ageGroup: '60', cityRank: 'B', districtRank: 'D', birth: '1963-02-05', joinDate: '', phone: '010-5352-1791' },
+  { name: '이창민',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '50', cityRank: 'D', districtRank: 'D', birth: '1973-06-18', joinDate: '', phone: '010-9266-7920' },
+  { name: '이지은',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '여', ageGroup: '50', cityRank: 'C', districtRank: 'D', birth: '1973-04-24', joinDate: '', phone: '010-5087-7070' },
+  { name: '이승기',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '50', cityRank: 'A', districtRank: 'D', birth: '1971-08-03', joinDate: '', phone: '010-5427-6585' },
+  { name: '김기희',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1969-05-30', joinDate: '', phone: '010-2744-2119' },
+  { name: '배원일',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '경기',  협회비: true,  gender: '남', ageGroup: '45', cityRank: 'D', districtRank: 'D', birth: '1981-08-17', joinDate: '', phone: '010-5670-6621' },
+  { name: '황민환',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '45', cityRank: 'D', districtRank: 'D', birth: '1977-11-20', joinDate: '', phone: '010-8507-1758' },
+  { name: '이은희',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '여', ageGroup: '55', cityRank: 'A', districtRank: 'D', birth: '1969-09-05', joinDate: '', phone: '010-4706-6889' },
+  { name: '유영범',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '60', cityRank: 'D', districtRank: 'D', birth: '1963-06-18', joinDate: '', phone: '010-3409-2663' },
+  { name: '최윤정',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1992-09-22', joinDate: '', phone: '010-4806-2100' },
+  { name: '김미영',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '여', ageGroup: '55', cityRank: 'A', districtRank: 'D', birth: '1970-07-03', joinDate: '', phone: '010-6407-3477' },
+  { name: '정유상',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: true,  gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1969-05-03', joinDate: '', phone: '010-6415-5119' },
+  { name: '이정임 (박범규)', type: '연간 정회원', fee: 275000, months: ['연납'],              amount: 275000, role: '',      협회비: true,  gender: '여', ageGroup: '50', cityRank: '초심', districtRank: '초심', birth: '1975-09-27', joinDate: '', phone: '010-5102-4668' },
+  { name: '유선준',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1969-12-18', joinDate: '', phone: '010-4477-0538' },
+  { name: '김진상',       type: '연간 정회원', fee: 275000, months: ['연납'],                 amount: 275000, role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
   // ── 가족회원 ──
-  { name: '박성호 (윤애영)', type: '가족회원', fee: 20000, months: ['2','3'], amount: 20000, role: '', 협회비: true },
-  { name: '윤애영 (박성호)', type: '가족회원', fee: 20000, months: ['2','3'], amount: 20000, role: '', 협회비: false },
-  { name: '박성태 (박건하)', type: '가족회원', fee: 20000, months: ['1','2','3'], amount: 20000, role: '', 협회비: true },
-  { name: '박건하 (박성태)', type: '가족회원', fee: 20000, months: ['1','2','3'], amount: 20000, role: '', 협회비: false },
-  { name: '박춘구 (김동님)', type: '가족회원', fee: 20000, months: [], amount: 20000, role: '남부회장', 협회비: false },
-  { name: '김동님 (박춘구)', type: '가족회원', fee: 20000, months: [], amount: 20000, role: '', 협회비: false },
-  { name: '강미경 (방병훈)', type: '가족회원', fee: 20000, months: ['1','2','3'], amount: 20000, role: '', 협회비: true },
-  { name: '방병훈 (강미경)', type: '가족회원', fee: 20000, months: ['1','2','3'], amount: 20000, role: '', 협회비: true },
-  { name: '배시우 (배원일)', type: '가족회원', fee: 20000, months: ['3'], amount: 20000, role: '', 협회비: false },
-  { name: '박소은 (이정임)', type: '가족회원', fee: 20000, months: ['2'], amount: 20000, role: '', 협회비: false },
+  { name: '박성호 (윤애영)', type: '가족회원', fee: 20000, months: ['2','3'],                 amount: 20000, role: '',      협회비: true,  gender: '남', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1995-01-20', joinDate: '2026-01-20', phone: '010-4505-8122' },
+  { name: '윤애영 (박성호)', type: '가족회원', fee: 20000, months: ['2','3'],                 amount: 20000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1994-02-17', joinDate: '2026-01-20', phone: '010-9491-0696' },
+  { name: '박성태 (박건하)', type: '가족회원', fee: 20000, months: ['1','2','3'],             amount: 20000, role: '',      협회비: true,  gender: '남', ageGroup: '50', cityRank: '초심', districtRank: '초심', birth: '1975-05-16', joinDate: '', phone: '010-4775-9980' },
+  { name: '박건하 (박성태)', type: '가족회원', fee: 20000, months: ['1','2','3'],             amount: 20000, role: '',      협회비: false, gender: '남', ageGroup: '청소년', cityRank: '초심', districtRank: '초심', birth: '', joinDate: '', phone: '' },
+  { name: '강미경 (방병훈)', type: '가족회원', fee: 20000, months: ['1','2','3'],             amount: 20000, role: '',      협회비: true,  gender: '여', ageGroup: '55', cityRank: 'C', districtRank: 'D', birth: '1969-11-12', joinDate: '', phone: '010-5654-4244' },
+  { name: '방병훈 (강미경)', type: '가족회원', fee: 20000, months: ['1','2','3'],             amount: 20000, role: '',      협회비: true,  gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1970-04-25', joinDate: '', phone: '010-5231-6553' },
+  { name: '박춘구 (김동님)', type: '가족회원', fee: 20000, months: [],                       amount: 20000, role: '남부회장', 협회비: false, gender: '남', ageGroup: '50', cityRank: 'D', districtRank: 'D', birth: '1971-02-10', joinDate: '', phone: '010-4171-6121' },
+  { name: '김동님 (박춘구)', type: '가족회원', fee: 20000, months: [],                       amount: 20000, role: '',      협회비: false, gender: '여', ageGroup: '50', cityRank: 'A', districtRank: 'D', birth: '1974-03-13', joinDate: '', phone: '010-7271-6121' },
+  { name: '배시우 (배원일)', type: '가족회원', fee: 20000, months: ['3'],                     amount: 20000, role: '',      협회비: false, gender: '남', ageGroup: '청소년', cityRank: '초심', districtRank: '초심', birth: '2013-10-16', joinDate: '2026-02-19', phone: '010-9155-4190', note: '배원일 아들' },
+  { name: '박소은 (이정임)', type: '가족회원', fee: 20000, months: ['2'],                     amount: 20000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '2005-08-18', joinDate: '2026-01-28', phone: '010-5822-4668' },
   // ── 준회원 ──
-  { name: '박범규 (이정임)', type: '준회원', fee: 0, months: ['2'], amount: 0, role: '청소년', 협회비: false },
-  // ── 특별회원 (면제) ──
-  { name: '손유진', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '문병덕', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '이선혜', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '신병훈', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '신원석', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '이송주', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
-  { name: '유대호', type: '특별회원', fee: 0, months: ['면제'], amount: 0, role: '', 협회비: false },
+  { name: '박범규 (이정임)', type: '준회원',  fee: 0,      months: ['2'],                     amount: 0,     role: '',      협회비: false, gender: '남', ageGroup: '청소년', cityRank: '초심', districtRank: '초심', birth: '2010-08-02', joinDate: '', phone: '010-9623-4668', note: '엄마따라 가끔' },
   // ── 코치 ──
-  { name: '이지혜 코치', type: '코치', fee: 0, months: ['면제'], amount: 0, role: '코치', 협회비: false },
+  { name: '이지혜 코치',    type: '코치',     fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  // ── 특별회원 ──
+  { name: '손유진',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: 'A', districtRank: 'A', birth: '1986-12-14', joinDate: '', phone: '010-7235-2209' },
+  { name: '문병덕',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '이선혜',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '신병훈',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '신원석',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '이송주',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
+  { name: '유대호',         type: '특별회원', fee: 0,      months: ['면제'],                   amount: 0,     role: '',      협회비: false, gender: '', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
   // ── 활동대기 ──
-  { name: '남수완', type: '활동대기', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '허준', type: '활동대기', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '백인혜', type: '활동대기', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '권순교', type: '활동대기', fee: 25000, months: [], amount: 25000, role: '', 협회비: false },
-  { name: '황안순 (김용식)', type: '활동대기', fee: 20000, months: [], amount: 20000, role: '', 협회비: false },
+  { name: '남수완',         type: '활동대기', fee: 25000, months: [],                         amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1997-08-21', joinDate: '2026-02-28', phone: '010-8864-7715' },
+  { name: '허준',           type: '활동대기', fee: 25000, months: [],                         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '45', cityRank: '초심', districtRank: '초심', birth: '1981-02-24', joinDate: '2026-03-03', phone: '010-5613-0506' },
+  { name: '백인혜',         type: '활동대기', fee: 25000, months: [],                         amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1998-05-10', joinDate: '2026-02-19', phone: '010-8897-3286', note: '3월부터 활동' },
+  { name: '권순교',         type: '활동대기', fee: 25000, months: [],                         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1996-12-28', joinDate: '2026-02-19', phone: '010-2292-1870', note: '26.03부터 시작' },
+  { name: '황안순 (김용식)', type: '활동대기', fee: 20000, months: [],                        amount: 20000, role: '',      협회비: false, gender: '여', ageGroup: '55', cityRank: '초심', districtRank: '초심', birth: '1971-02-27', joinDate: '2026-03-01', phone: '010-4095-9587' },
   // ── 휴동 ──
-  { name: '홍명애 (정시근)', type: '휴동', fee: 20000, months: ['1','2'], amount: 20000, role: '26.03~08 휴동', 협회비: false },
+  { name: '홍명애 (정시근)', type: '휴동',    fee: 20000, months: ['1','2'],                  amount: 20000, role: '26.03~08 휴동', 협회비: false, gender: '여', ageGroup: '55', cityRank: 'B', districtRank: 'D', birth: '1967-11-15', joinDate: '', phone: '010-3096-0577' },
 ];
 
 // ══════════════════════════════════════════
@@ -1286,10 +1407,10 @@ function initNotionData() {
 // ══════════════════════════════════════════
 function renderAssoc() {
   const sortKo = arr => [...arr].sort((a,b) => a.name.localeCompare(b.name, 'ko'));
-  const target    = MEMBERS.filter(m => ['정회원','연간 정회원','가족회원'].includes(m.type));
+  const target    = getAllMembers().filter(m => ['정회원','연간 정회원','가족회원'].includes(m.type));
   const paid      = sortKo(target.filter(m => m.협회비 === true));
   const unpaid    = sortKo(target.filter(m => m.협회비 === false));
-  const naMembers = sortKo(MEMBERS.filter(m => !['정회원','연간 정회원','가족회원'].includes(m.type)));
+  const naMembers = sortKo(getAllMembers().filter(m => !['정회원','연간 정회원','가족회원'].includes(m.type)));
 
   document.getElementById('assoc-paid-count').textContent   = paid.length + '명';
   document.getElementById('assoc-unpaid-count').textContent = unpaid.length + '명';
@@ -1492,7 +1613,7 @@ function renderHome() {
   document.getElementById('bal-shuttlecock').textContent = fmtMoney(bal['셔틀콕']||0);
 
   // 미납 (현재월 납부 안된 정회원/가족회원)
-  const unpaid = MEMBERS.filter(m =>
+  const unpaid = getAllMembers().filter(m =>
     ['정회원','가족회원','연간 정회원'].includes(m.type) &&
     !m.months.includes(CURRENT_MONTH) &&
     !m.months.includes('연납') &&
@@ -1568,14 +1689,14 @@ function renderMembers() {
     <button class="filter-chip ${memberFilter===t?'active':''}" onclick="setMemberFilter('${t}')">${t}</button>
   `).join('');
 
-  let members = [...MEMBERS].sort((a,b) => a.name.localeCompare(b.name, 'ko'));
+  let members = getAllMembers().sort((a,b) => a.name.localeCompare(b.name, 'ko'));
   if(memberFilter !== '전체') {
     if(memberFilter === '휴동') members = members.filter(m => m.type === '휴동');
     else members = members.filter(m => m.type === memberFilter);
   }
   if(search) members = members.filter(m => m.name.toLowerCase().includes(search));
 
-  document.getElementById('memberCount').textContent = `총 ${MEMBERS.length}명 · 표시 ${members.length}명`;
+  document.getElementById('memberCount').textContent = `총 ${getAllMembers().length}명 · 표시 ${members.length}명`;
 
   const tbody = document.getElementById('memberTableBody');
   if(members.length === 0) {
@@ -1589,6 +1710,20 @@ function renderMembers() {
     const unpaidThis = ['정회원','가족회원'].includes(m.type) &&
       !m.months.includes(CURRENT_MONTH) &&
       !m.months.includes('면제') && m.amount > 0;
+    const mNameEsc = m.name.replace(/'/g,"&#39;").replace(/"/g,'&quot;');
+    const adminCols = isAdmin ? `
+      <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.gender||'—'}</td>
+      <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.ageGroup||'—'}</td>
+      <td class="admin-col" style="font-size:12px;">${m.cityRank ? `<span style="background:var(--green-dark);color:#fff;border-radius:4px;padding:1px 6px;font-size:11px;">${m.cityRank}</span>` : '—'}</td>
+      <td class="admin-col" style="font-size:12px;">${m.districtRank ? `<span style="background:#1a3a2a;color:var(--green-bright);border-radius:4px;padding:1px 6px;font-size:11px;border:1px solid var(--green-dark);">${m.districtRank}</span>` : '—'}</td>
+      <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.birth||'—'}</td>
+      <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.joinDate||'—'}</td>
+      <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.phone||'—'}</td>
+      <td class="admin-col" style="padding:4px 6px;">
+        <button onclick="openEditMemberModal('${mNameEsc}')"
+          style="background:var(--surface2);color:var(--green-bright);border:1px solid var(--green-dark);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
+      </td>
+    ` : '';
     return `
       <tr>
         <td>
@@ -1599,6 +1734,7 @@ function renderMembers() {
         <td><span class="status-badge status-${m.type}">${m.type}</span></td>
         <td>${chips}</td>
         <td style="font-weight:700;color:var(--text-muted)">${m.amount ? fmtMoney(m.amount) : '—'}</td>
+        ${adminCols}
       </tr>
     `;
   }).join('');
@@ -2230,6 +2366,204 @@ ${detailRows}
 }
 
 
+// ══════════════════════════════════════════
+//  회원 추가 모달 (관리자 전용)
+// ══════════════════════════════════════════
+// 회원 데이터 저장 키
+const MEMBERS_KEY = 'sinwha_members_v1';
+
+function loadCustomMembers() {
+  try { return JSON.parse(localStorage.getItem(MEMBERS_KEY) || '[]'); } catch { return []; }
+}
+function saveCustomMembers(arr) {
+  localStorage.setItem(MEMBERS_KEY, JSON.stringify(arr));
+}
+
+// 앱 기동 시 localStorage 추가 회원 + 기본 MEMBERS 합산
+function getAllMembers() {
+  const custom = loadCustomMembers();
+  // MEMBERS에 없는 이름만 추가
+  const baseNames = new Set(MEMBERS.map(m => m.name));
+  const extra = custom.filter(m => !baseNames.has(m.name));
+  return [...MEMBERS, ...extra];
+}
+
+// ══════════════════════════════════════════
+//  회원 추가 / 수정 모달
+// ══════════════════════════════════════════
+
+// ── 날짜 자동 포맷 (YYYY-MM-DD 커서이동) ─────
+function autoDateInput(el, nextId) {
+  let raw = el.value.replace(/\D/g,'');
+  let fmt = '';
+  if(raw.length <= 4)       fmt = raw;
+  else if(raw.length <= 6)  fmt = raw.slice(0,4)+'-'+raw.slice(4);
+  else                      fmt = raw.slice(0,4)+'-'+raw.slice(4,6)+'-'+raw.slice(6,8);
+  el.value = fmt;
+  // 자동 포커스 이동
+  if(nextId && raw.length === 8) {
+    const nx = document.getElementById(nextId);
+    if(nx) setTimeout(()=>nx.focus(),30);
+  }
+}
+function dateKeydown(e, el) {
+  // Backspace로 하이픈 건너뜀
+  if(e.key==='Backspace') {
+    const v = el.value, c = el.selectionStart;
+    if(c>0 && v[c-1]==='-') {
+      e.preventDefault();
+      el.setSelectionRange(c-1,c-1);
+    }
+  }
+}
+
+// ── 전화번호 자동 포맷 ─────────────────────
+function phoneFocus(el) {
+  if(!el.value) el.value = '010-';
+}
+function autoPhoneInput(el) {
+  let raw = el.value.replace(/\D/g,'');
+  if(!raw.startsWith('010')) raw = '010' + raw.replace(/^010/,'');
+  raw = raw.slice(0,11);
+  let fmt = '';
+  if(raw.length <= 3)       fmt = raw;
+  else if(raw.length <= 7)  fmt = raw.slice(0,3)+'-'+raw.slice(3);
+  else                      fmt = raw.slice(0,3)+'-'+raw.slice(3,7)+'-'+raw.slice(7);
+  const prev = el.value, sel = el.selectionStart;
+  el.value = fmt;
+  // 4번째 자리(인덱스 7) 자동으로 커서 뒤로 옮기기는 네이티브가 처리
+  // 8번째 숫자(fmt 길이 13) 입력 완료 시 다음 필드로
+  if(raw.length===11) {
+    const nextEl = el.closest('div').nextElementSibling;
+    if(nextEl) { const inp=nextEl.querySelector('input'); if(inp) setTimeout(()=>inp.focus(),30); }
+  }
+}
+function phoneKeydown(e, el) {
+  if(e.key==='Backspace') {
+    const v=el.value, c=el.selectionStart;
+    if(c>0 && v[c-1]==='-') { e.preventDefault(); el.setSelectionRange(c-1,c-1); }
+    // 010- 앞부분 지우지 않게
+    if(v==='010-' && c<=4) { e.preventDefault(); }
+  }
+}
+
+// ── 모달 공통 fill 함수 ────────────────────
+function fillModal(m, isEdit) {
+  document.getElementById('modalTitle').textContent = isEdit ? `✏️ 회원 수정 — ${m.name}` : '👤 회원 추가';
+  document.getElementById('modalSaveBtn').textContent = isEdit ? '✅ 저장 (수정)' : '✅ 저장';
+  document.getElementById('nm-edit-original').value = isEdit ? m.name : '';
+  document.getElementById('nm-name').value       = m.name    || '';
+  document.getElementById('nm-type').value       = m.type    || '정회원';
+  document.getElementById('nm-role').value       = m.role    || '';
+  document.getElementById('nm-fee').value        = m.fee     || m.amount || 25000;
+  document.getElementById('nm-feetype').value    = m.feeType || '월회비';
+  document.getElementById('nm-gender').value     = m.gender  || '';
+  document.getElementById('nm-age').value        = m.ageGroup|| '';
+  document.getElementById('nm-city').value       = m.cityRank|| '';
+  document.getElementById('nm-district').value   = m.districtRank||'';
+  document.getElementById('nm-birth').value      = m.birth   || '';
+  document.getElementById('nm-joindate').value   = m.joinDate|| '';
+  document.getElementById('nm-note').value       = m.note    || '';
+  // 전화번호: 010- 자동 prefix
+  const ph = m.phone||'';
+  document.getElementById('nm-phone').value = ph || '010-';
+  document.getElementById('nm-name').disabled = isEdit ? false : false;
+  document.getElementById('addMemberModal').style.display = 'block';
+}
+
+function openAddMemberModal() {
+  fillModal({ name:'', type:'정회원', role:'', fee:25000, feeType:'월회비',
+    gender:'', ageGroup:'', cityRank:'', districtRank:'', birth:'',
+    joinDate: new Date().toISOString().slice(0,10), note:'' }, false);
+}
+
+function openEditMemberModal(name) {
+  const all = getAllMembers();
+  const m   = all.find(x => x.name === name);
+  if(!m) { alert('회원 정보를 찾을 수 없습니다.'); return; }
+  fillModal(m, true);
+}
+
+function closeAddMemberModal() {
+  document.getElementById('addMemberModal').style.display = 'none';
+}
+
+function collectModalData() {
+  return {
+    name:         document.getElementById('nm-name').value.trim(),
+    type:         document.getElementById('nm-type').value,
+    role:         document.getElementById('nm-role').value.trim(),
+    fee:          parseInt(document.getElementById('nm-fee').value||'25000'),
+    amount:       parseInt(document.getElementById('nm-fee').value||'25000'),
+    months:       undefined,   // 수정 시 유지, 추가 시 []
+    협회비:        undefined,
+    gender:       document.getElementById('nm-gender').value,
+    ageGroup:     document.getElementById('nm-age').value,
+    cityRank:     document.getElementById('nm-city').value,
+    districtRank: document.getElementById('nm-district').value,
+    birth:        document.getElementById('nm-birth').value,
+    joinDate:     document.getElementById('nm-joindate').value,
+    phone:        document.getElementById('nm-phone').value.replace(/[^0-9\-]/g,'').trim(),
+    note:         document.getElementById('nm-note').value.trim(),
+    feeType:      document.getElementById('nm-feetype').value,
+  };
+}
+
+function saveNewMember() {
+  const originalName = document.getElementById('nm-edit-original').value;
+  const isEdit = !!originalName;
+  const data = collectModalData();
+  if(!data.name) { alert('이름을 입력해주세요'); return; }
+
+  if(isEdit) {
+    // ── 수정 모드 ──
+    // MEMBERS 배열 내 회원인지 확인
+    const baseIdx = MEMBERS.findIndex(m => m.name === originalName);
+    if(baseIdx >= 0) {
+      // MEMBERS 는 const → localStorage override 방식으로 저장
+      // custom 배열에 override 항목 추가 (이름 같은 것이 있으면 교체)
+      const custom = loadCustomMembers();
+      const overrideIdx = custom.findIndex(m => m.name === originalName);
+      const updated = Object.assign({}, MEMBERS[baseIdx], data);
+      updated.months = MEMBERS[baseIdx].months;
+      updated['협회비'] = MEMBERS[baseIdx]['협회비'];
+      if(overrideIdx >= 0) custom[overrideIdx] = updated;
+      else                  custom.push(updated);
+      // MEMBERS 원본도 직접 패치 (런타임)
+      Object.assign(MEMBERS[baseIdx], data);
+      saveCustomMembers(custom);
+    } else {
+      // localStorage custom 회원
+      const custom = loadCustomMembers();
+      const idx = custom.findIndex(m => m.name === originalName);
+      if(idx < 0) { alert('수정할 회원을 찾을 수 없습니다.'); return; }
+      const prev = custom[idx];
+      custom[idx] = Object.assign({}, prev, data);
+      if(data.name !== originalName) {
+        // 이름 바꾸는 경우 중복 체크
+        const allNames = new Set([...MEMBERS.map(m=>m.name), ...custom.filter((_,i)=>i!==idx).map(m=>m.name)]);
+        if(allNames.has(data.name)) { alert(`"${data.name}"은(는) 이미 있는 이름입니다`); return; }
+      }
+      saveCustomMembers(custom);
+    }
+    closeAddMemberModal();
+    showToast(`✅ ${data.name} 정보가 수정됐어요!`);
+  } else {
+    // ── 추가 모드 ──
+    const custom = loadCustomMembers();
+    const allNames = new Set([...MEMBERS.map(m=>m.name), ...custom.map(m=>m.name)]);
+    if(allNames.has(data.name)) { alert(`"${data.name}"은(는) 이미 등록된 회원입니다`); return; }
+    data.months = [];
+    data['협회비'] = false;
+    custom.push(data);
+    saveCustomMembers(custom);
+    closeAddMemberModal();
+    showToast(`✅ ${data.name} 회원이 추가됐어요!`);
+  }
+  renderMembers();
+  renderAssoc();
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -2258,6 +2592,12 @@ function updateTabVisibility() {
     badge.className = 'mode-badge member';
     badge.onclick = () => openPin(null);
   }
+  // 관리자 전용 UI 토글
+  const btnAdd = document.getElementById('btnAddMember');
+  if(btnAdd) btnAdd.style.display = isAdmin ? 'block' : 'none';
+  document.querySelectorAll('.admin-col').forEach(el => {
+    el.style.display = isAdmin ? '' : 'none';
+  });
 }
 
 function openPin(pendingTab) {
