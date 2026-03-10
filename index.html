@@ -1061,7 +1061,23 @@
             <input id="nm-note" placeholder="가족관계, 특이사항 등" style="width:100%;margin-top:4px;background:var(--surface2);color:var(--text-main);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:14px;box-sizing:border-box;" />
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;">
+        <!-- 납입월 + 협회비 (수정 모드일 때만 표시) -->
+        <div id="nm-edit-section" style="display:none;border-top:1px solid var(--border);padding-top:14px;margin-top:4px;">
+          <div style="font-size:12px;color:var(--green-bright);font-weight:600;margin-bottom:10px;">📅 납입 현황</div>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">납입월 <span style="font-weight:400;color:var(--text-muted)">(클릭으로 토글)</span></label>
+            <div id="nm-months-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+            <input type="hidden" id="nm-months-data" value="[]" />
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <label style="font-size:12px;color:var(--text-muted);font-weight:600;">협회비 납부</label>
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="nm-assoc" style="width:16px;height:16px;accent-color:var(--green-bright);" />
+              <span id="nm-assoc-label" style="font-size:13px;color:var(--text-muted);">미납</span>
+            </label>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px;">
           <button onclick="closeAddMemberModal()" style="background:var(--surface2);color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;">취소</button>
           <button id="modalSaveBtn" onclick="saveNewMember()" style="background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:600;cursor:pointer;">✅ 저장</button>
         </div>
@@ -1710,6 +1726,7 @@ function renderMembers() {
     const unpaidThis = ['정회원','가족회원'].includes(m.type) &&
       !m.months.includes(CURRENT_MONTH) &&
       !m.months.includes('면제') && m.amount > 0;
+    const mId     = (m._id || m.name).replace(/'/g,"&#39;").replace(/"/g,'&quot;');
     const mNameEsc = m.name.replace(/'/g,"&#39;").replace(/"/g,'&quot;');
     const adminCols = isAdmin ? `
       <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.gender||'—'}</td>
@@ -1719,9 +1736,11 @@ function renderMembers() {
       <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.birth||'—'}</td>
       <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.joinDate||'—'}</td>
       <td class="admin-col" style="font-size:12px;color:var(--text-muted);">${m.phone||'—'}</td>
-      <td class="admin-col" style="padding:4px 6px;">
-        <button onclick="openEditMemberModal('${mNameEsc}')"
-          style="background:var(--surface2);color:var(--green-bright);border:1px solid var(--green-dark);border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;white-space:nowrap;">✏️ 수정</button>
+      <td class="admin-col" style="padding:4px 6px;white-space:nowrap;">
+        <button onclick="openEditMemberModal('${mId}')"
+          style="background:var(--surface2);color:var(--green-bright);border:1px solid var(--green-dark);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;margin-right:4px;">✏️ 수정</button>
+        <button onclick="deleteMember('${mId}','${mNameEsc}')"
+          style="background:rgba(230,57,70,.1);color:var(--red-soft);border:1px solid rgba(230,57,70,.3);border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer;">🗑️ 삭제</button>
       </td>
     ` : '';
     return `
@@ -2370,7 +2389,24 @@ ${detailRows}
 //  회원 추가 모달 (관리자 전용)
 // ══════════════════════════════════════════
 // 회원 데이터 저장 키
-const MEMBERS_KEY = 'sinwha_members_v1';
+const MEMBERS_KEY = 'sinwha_members_v2';  // v2: _id 기반 설계
+
+// ── v1 → v2 마이그레이션 (최초 1회) ─────
+(function migrateV1() {
+  const v1 = localStorage.getItem('sinwha_members_v1');
+  const v2 = localStorage.getItem('sinwha_members_v2');
+  if(!v1 || v2) return; // 마이그레이션 불필요
+  try {
+    const old = JSON.parse(v1);
+    const migrated = old.map(m => {
+      const baseMatch = MEMBERS.find(b => b.name === (m._originalName || m.name));
+      const id = baseMatch ? baseMatch.name : (m._id || 'new_' + Date.now() + '_' + Math.random().toString(36).slice(2,6));
+      return Object.assign({}, m, { _id: id });
+    });
+    localStorage.setItem('sinwha_members_v2', JSON.stringify(migrated));
+    console.log('[마이그레이션] v1→v2 완료, 항목수:', migrated.length);
+  } catch(e) { console.warn('마이그레이션 실패:', e); }
+})();
 
 function loadCustomMembers() {
   try { return JSON.parse(localStorage.getItem(MEMBERS_KEY) || '[]'); } catch { return []; }
@@ -2379,13 +2415,32 @@ function saveCustomMembers(arr) {
   localStorage.setItem(MEMBERS_KEY, JSON.stringify(arr));
 }
 
-// 앱 기동 시 localStorage 추가 회원 + 기본 MEMBERS 합산
+// ── 회원 통합 조회 ─────────────────────────────
+// custom 구조:
+//   신규 추가: { _id: 'new_xxx', name: '홍길동', ... }
+//   기본 수정: { _id: '기본회원이름', name: '수정된이름', ... }  ← _id = MEMBERS 원본 name
+//   기본 삭제: { _id: '기본회원이름', _deleted: true }
 function getAllMembers() {
   const custom = loadCustomMembers();
-  // MEMBERS에 없는 이름만 추가
-  const baseNames = new Set(MEMBERS.map(m => m.name));
-  const extra = custom.filter(m => !baseNames.has(m.name));
-  return [...MEMBERS, ...extra];
+  // _id → custom항목 맵
+  const customById = new Map(custom.map(m => [m._id, m]));
+
+  // 1) MEMBERS 원본: 삭제된 것 제외, 수정본 있으면 merge
+  const baseList = MEMBERS
+    .filter(m => {
+      const ov = customById.get(m.name);
+      return !(ov && ov._deleted);
+    })
+    .map(m => {
+      const ov = customById.get(m.name);
+      if(!ov) return m;
+      return Object.assign({}, m, ov);
+    });
+
+  // 2) 순수 신규 (_id가 'new_'로 시작, 삭제 안 된 것)
+  const extra = custom.filter(m => m._id && m._id.startsWith('new_') && !m._deleted);
+
+  return [...baseList, ...extra];
 }
 
 // ══════════════════════════════════════════
@@ -2419,24 +2474,20 @@ function dateKeydown(e, el) {
 
 // ── 전화번호 자동 포맷 ─────────────────────
 function phoneFocus(el) {
-  if(!el.value) el.value = '010-';
+  const raw = el.value.replace(/\D/g,'');
+  if(!raw) el.value = '010-';
 }
 function autoPhoneInput(el) {
+  const pos = el.selectionStart;
   let raw = el.value.replace(/\D/g,'');
-  if(!raw.startsWith('010')) raw = '010' + raw.replace(/^010/,'');
-  raw = raw.slice(0,11);
+  // 010 앞에 다른 숫자가 없도록
+  if(raw.length >= 3 && !raw.startsWith('010')) raw = '010' + raw.slice(3);
+  if(raw.length > 11) raw = raw.slice(0,11);
   let fmt = '';
-  if(raw.length <= 3)       fmt = raw;
-  else if(raw.length <= 7)  fmt = raw.slice(0,3)+'-'+raw.slice(3);
-  else                      fmt = raw.slice(0,3)+'-'+raw.slice(3,7)+'-'+raw.slice(7);
-  const prev = el.value, sel = el.selectionStart;
+  if(raw.length <= 3)      fmt = raw;
+  else if(raw.length <= 7) fmt = raw.slice(0,3)+'-'+raw.slice(3);
+  else                     fmt = raw.slice(0,3)+'-'+raw.slice(3,7)+'-'+raw.slice(7);
   el.value = fmt;
-  // 4번째 자리(인덱스 7) 자동으로 커서 뒤로 옮기기는 네이티브가 처리
-  // 8번째 숫자(fmt 길이 13) 입력 완료 시 다음 필드로
-  if(raw.length===11) {
-    const nextEl = el.closest('div').nextElementSibling;
-    if(nextEl) { const inp=nextEl.querySelector('input'); if(inp) setTimeout(()=>inp.focus(),30); }
-  }
 }
 function phoneKeydown(e, el) {
   if(e.key==='Backspace') {
@@ -2451,7 +2502,7 @@ function phoneKeydown(e, el) {
 function fillModal(m, isEdit) {
   document.getElementById('modalTitle').textContent = isEdit ? `✏️ 회원 수정 — ${m.name}` : '👤 회원 추가';
   document.getElementById('modalSaveBtn').textContent = isEdit ? '✅ 저장 (수정)' : '✅ 저장';
-  document.getElementById('nm-edit-original').value = isEdit ? m.name : '';
+  document.getElementById('nm-edit-original').value = isEdit ? (m._id || m.name) : '';
   document.getElementById('nm-name').value       = m.name    || '';
   document.getElementById('nm-type').value       = m.type    || '정회원';
   document.getElementById('nm-role').value       = m.role    || '';
@@ -2464,11 +2515,55 @@ function fillModal(m, isEdit) {
   document.getElementById('nm-birth').value      = m.birth   || '';
   document.getElementById('nm-joindate').value   = m.joinDate|| '';
   document.getElementById('nm-note').value       = m.note    || '';
-  // 전화번호: 010- 자동 prefix
-  const ph = m.phone||'';
-  document.getElementById('nm-phone').value = ph || '010-';
-  document.getElementById('nm-name').disabled = isEdit ? false : false;
+  // 전화번호: 값 있으면 그대로, 없으면 010-
+  const phRaw = (m.phone||'').replace(/\D/g,'');
+  if(phRaw.length >= 10) {
+    const p = phRaw.slice(0,3)+'-'+phRaw.slice(3,7)+'-'+phRaw.slice(7);
+    document.getElementById('nm-phone').value = p;
+  } else {
+    document.getElementById('nm-phone').value = phRaw ? phRaw : '010-';
+  }
+  // 납입월 + 협회비 섹션: 수정 모드에서만 표시
+  const editSec = document.getElementById('nm-edit-section');
+  editSec.style.display = isEdit ? 'block' : 'none';
+  if(isEdit) {
+    // 납입월 chip 렌더링
+    const curMonths = Array.isArray(m.months) ? [...m.months] : [];
+    document.getElementById('nm-months-data').value = JSON.stringify(curMonths);
+    renderMonthChips(curMonths);
+    // 협회비 체크박스
+    const assocEl = document.getElementById('nm-assoc');
+    const assocLabel = document.getElementById('nm-assoc-label');
+    assocEl.checked = m['협회비'] || false;
+    assocLabel.textContent = assocEl.checked ? '납부 ✅' : '미납';
+    assocEl.onchange = function() {
+      assocLabel.textContent = this.checked ? '납부 ✅' : '미납';
+    };
+  }
   document.getElementById('addMemberModal').style.display = 'block';
+}
+
+function renderMonthChips(selected) {
+  const allMonths = ['1','2','3','4','5','6','7','8','9','10','11','12','면제'];
+  const wrap = document.getElementById('nm-months-chips');
+  wrap.innerHTML = allMonths.map(mo => {
+    const on = selected.includes(mo);
+    return `<span onclick="toggleMonthChip('${mo}')"
+      style="padding:4px 10px;border-radius:20px;font-size:12px;cursor:pointer;user-select:none;
+        background:${on ? 'var(--green-dark)' : 'var(--surface2)'};
+        color:${on ? '#fff' : 'var(--text-muted)'};
+        border:1px solid ${on ? 'var(--green-bright)' : 'var(--border)'};
+        font-weight:${on ? '700' : '400'};">${mo}월</span>`;
+  }).join('');
+}
+
+function toggleMonthChip(mo) {
+  const hidden = document.getElementById('nm-months-data');
+  let cur = JSON.parse(hidden.value || '[]');
+  if(cur.includes(mo)) cur = cur.filter(x => x !== mo);
+  else cur.push(mo);
+  hidden.value = JSON.stringify(cur);
+  renderMonthChips(cur);
 }
 
 function openAddMemberModal() {
@@ -2477,9 +2572,10 @@ function openAddMemberModal() {
     joinDate: new Date().toISOString().slice(0,10), note:'' }, false);
 }
 
-function openEditMemberModal(name) {
+function openEditMemberModal(memberId) {
   const all = getAllMembers();
-  const m   = all.find(x => x.name === name);
+  // _id 기준으로 찾기
+  const m = all.find(x => (x._id || x.name) === memberId);
   if(!m) { alert('회원 정보를 찾을 수 없습니다.'); return; }
   fillModal(m, true);
 }
@@ -2495,8 +2591,6 @@ function collectModalData() {
     role:         document.getElementById('nm-role').value.trim(),
     fee:          parseInt(document.getElementById('nm-fee').value||'25000'),
     amount:       parseInt(document.getElementById('nm-fee').value||'25000'),
-    months:       undefined,   // 수정 시 유지, 추가 시 []
-    협회비:        undefined,
     gender:       document.getElementById('nm-gender').value,
     ageGroup:     document.getElementById('nm-age').value,
     cityRank:     document.getElementById('nm-city').value,
@@ -2510,56 +2604,84 @@ function collectModalData() {
 }
 
 function saveNewMember() {
-  const originalName = document.getElementById('nm-edit-original').value;
-  const isEdit = !!originalName;
-  const data = collectModalData();
+  const editId  = document.getElementById('nm-edit-original').value; // _id 저장
+  const isEdit  = !!editId;
+  const data    = collectModalData();
   if(!data.name) { alert('이름을 입력해주세요'); return; }
+
+  const custom  = loadCustomMembers();
 
   if(isEdit) {
     // ── 수정 모드 ──
-    // MEMBERS 배열 내 회원인지 확인
-    const baseIdx = MEMBERS.findIndex(m => m.name === originalName);
-    if(baseIdx >= 0) {
-      // MEMBERS 는 const → localStorage override 방식으로 저장
-      // custom 배열에 override 항목 추가 (이름 같은 것이 있으면 교체)
-      const custom = loadCustomMembers();
-      const overrideIdx = custom.findIndex(m => m.name === originalName);
-      const updated = Object.assign({}, MEMBERS[baseIdx], data);
-      updated.months = MEMBERS[baseIdx].months;
-      updated['협회비'] = MEMBERS[baseIdx]['협회비'];
-      if(overrideIdx >= 0) custom[overrideIdx] = updated;
-      else                  custom.push(updated);
-      // MEMBERS 원본도 직접 패치 (런타임)
-      Object.assign(MEMBERS[baseIdx], data);
-      saveCustomMembers(custom);
-    } else {
-      // localStorage custom 회원
-      const custom = loadCustomMembers();
-      const idx = custom.findIndex(m => m.name === originalName);
-      if(idx < 0) { alert('수정할 회원을 찾을 수 없습니다.'); return; }
-      const prev = custom[idx];
-      custom[idx] = Object.assign({}, prev, data);
-      if(data.name !== originalName) {
-        // 이름 바꾸는 경우 중복 체크
-        const allNames = new Set([...MEMBERS.map(m=>m.name), ...custom.filter((_,i)=>i!==idx).map(m=>m.name)]);
-        if(allNames.has(data.name)) { alert(`"${data.name}"은(는) 이미 있는 이름입니다`); return; }
-      }
-      saveCustomMembers(custom);
-    }
+    // editId = _id (_id: 기본회원은 원본name, 신규는 'new_xxx')
+    const existIdx = custom.findIndex(m => m._id === editId);
+
+    // months / 협회비 기존 값 유지 (data에서 따로 가져옴)
+    const nmMonths = document.getElementById('nm-months-data') ?
+      JSON.parse(document.getElementById('nm-months-data').value || '[]') : null;
+    const nm협회비  = document.getElementById('nm-assoc') ?
+      document.getElementById('nm-assoc').checked : null;
+
+    const prevData   = existIdx >= 0 ? custom[existIdx]
+                     : MEMBERS.find(m => m.name === editId) || {};
+    const prevMonths = nmMonths !== null ? nmMonths
+                     : (Array.isArray(prevData.months) ? prevData.months : []);
+    const prev협회비  = nm협회비 !== null ? nm협회비
+                     : (prevData['협회비'] ?? false);
+
+    const saved = Object.assign({}, data, {
+      _id:     editId,
+      months:  prevMonths,
+      '협회비': prev협회비,
+    });
+
+    if(existIdx >= 0) custom[existIdx] = saved;
+    else              custom.push(saved);
+
+    saveCustomMembers(custom);
     closeAddMemberModal();
     showToast(`✅ ${data.name} 정보가 수정됐어요!`);
+
   } else {
-    // ── 추가 모드 ──
-    const custom = loadCustomMembers();
-    const allNames = new Set([...MEMBERS.map(m=>m.name), ...custom.map(m=>m.name)]);
-    if(allNames.has(data.name)) { alert(`"${data.name}"은(는) 이미 등록된 회원입니다`); return; }
-    data.months = [];
-    data['협회비'] = false;
-    custom.push(data);
+    // ── 추가 모드: 이름 중복 허용 (A/B 구분 가능), _id로 고유 식별 ──
+    const newId = 'new_' + Date.now();
+    const newMember = Object.assign({}, data, {
+      _id:     newId,
+      months:  [],
+      '협회비': false,
+    });
+    custom.push(newMember);
     saveCustomMembers(custom);
     closeAddMemberModal();
     showToast(`✅ ${data.name} 회원이 추가됐어요!`);
   }
+  renderMembers();
+  renderAssoc();
+}
+
+function deleteMember(memberId, memberName) {
+  if(!confirm(`"${memberName}" 회원을 삭제하시겠습니까?\n\n삭제 후에는 복구가 어렵습니다.`)) return;
+
+  const custom = loadCustomMembers();
+  // memberId: MEMBERS 기본 회원이면 원본 name, 신규라면 'new_xxx'
+  const isBase = MEMBERS.some(m => m.name === memberId);
+
+  if(isBase) {
+    // 기본 회원: custom에 _deleted:true upsert
+    const existIdx = custom.findIndex(m => m._id === memberId);
+    if(existIdx >= 0) {
+      custom[existIdx] = Object.assign({}, custom[existIdx], { _deleted: true });
+    } else {
+      custom.push({ _id: memberId, name: memberName, _deleted: true });
+    }
+  } else {
+    // 신규 추가 회원: custom에서 완전 제거
+    const idx = custom.findIndex(m => m._id === memberId);
+    if(idx >= 0) custom.splice(idx, 1);
+  }
+
+  saveCustomMembers(custom);
+  showToast(`🗑️ ${memberName} 회원이 삭제됐어요.`);
   renderMembers();
   renderAssoc();
 }
