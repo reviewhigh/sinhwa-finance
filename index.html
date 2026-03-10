@@ -899,6 +899,23 @@
       📋 전체 미리보기 복사 (재무현황 + 세부사항 + 세부내역)
     </button>
     <div id="auditCopyMsg" style="text-align:center;font-size:13px;color:var(--green-bright);margin-top:10px;min-height:20px;font-weight:600;"></div>
+
+    <!-- ── 노션 내보내기 ── -->
+    <div style="margin-top:24px;padding-top:20px;border-top:1px solid var(--border);">
+      <div style="font-size:13px;color:var(--text-muted);margin-bottom:6px;font-weight:600;">📤 노션 월간 정리</div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:10px;line-height:1.7;">
+        ① 신규 거래내역 → 재무DB 추가<br>
+        ② 월별 결산 요약 페이지 생성<br>
+        ③ 감사보고서 페이지 기록
+      </div>
+      <button onclick="startNotionSync()" id="notionSyncBtn"
+        style="width:100%;background:#2f2f2f;color:#fff;border:1px solid #555;border-radius:12px;padding:14px 0;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;">
+        <span style="font-size:18px;">🗂️</span>
+        <span id="notionSyncBtnText">노션 정리 시작</span>
+      </button>
+      <!-- 진행상황 로그 -->
+      <div id="notionSyncLog" style="display:none;margin-top:12px;background:#111;border-radius:10px;padding:12px;max-height:260px;overflow-y:auto;font-size:12px;line-height:1.9;color:#aaa;font-family:monospace;"></div>
+    </div>
   </div>
 
   <!-- ━━━━━━━━━━━━━━━ 회원 현황 ━━━━━━━━━━━━━━━ -->
@@ -1982,8 +1999,237 @@ function copyAuditSection(type) {
 }
 
 // ══════════════════════════════════════════
-//  토스트
+//  노션 재무DB 동기화 (3-in-1)
+//  ① 신규 거래내역 추가
+//  ② 월별 결산 요약 페이지 생성
+//  ③ 감사보고서 내용 기록
 // ══════════════════════════════════════════
+async function startNotionSync() {
+  const btn    = document.getElementById('notionSyncBtn');
+  const btnText= document.getElementById('notionSyncBtnText');
+  const logBox = document.getElementById('notionSyncLog');
+
+  btn.disabled = true;
+  logBox.style.display = 'block';
+  logBox.innerHTML = '';
+
+  function log(msg, color) {
+    const line = document.createElement('div');
+    line.style.color = color || '#aaa';
+    line.textContent = msg;
+    logBox.appendChild(line);
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+  function logStep(title) {
+    log('');
+    log('▶ ' + title, '#facc15');
+    log('─'.repeat(32));
+  }
+
+  // ── 감사보고서 데이터 계산 (renderAuditPreview와 같은 로직) ──
+  function calcAuditData(month) {
+    const allTxs = loadTx().filter(t => t.month === month);
+    const AUDIT_CAT_MAP = {
+      '회비':'회비','입회비':'가입비','셔틀콕':'회원구매 셔틀콕','레슨비':'레슨비',
+      '캐시백':'예금이자','이용료':'운영비','비품':'운영비','간식비':'운영비',
+      '협회비':'운영비','회식비':'행사비','행사비':'행사비','기타':'운영비','찬조금':'찬조금','단체복':'찬조금'
+    };
+    const banks = ['회비','셔틀콕','레슨비'];
+    const finance = {};
+    banks.forEach(b => {
+      finance[b] = {
+        carryover: allTxs.filter(t=>t.bank===b&&t.memo==='이월').reduce((s,t)=>s+t.amount,0),
+        income:    allTxs.filter(t=>t.bank===b&&t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0),
+        expense:   allTxs.filter(t=>t.bank===b&&t.type==='expense').reduce((s,t)=>s+t.amount,0),
+      };
+      finance[b].balance = finance[b].carryover + finance[b].income - finance[b].expense;
+    });
+    const totalIncome  = banks.reduce((s,b)=>s+finance[b].income,0);
+    const totalExpense = banks.reduce((s,b)=>s+finance[b].expense,0);
+    const totalBalance = banks.reduce((s,b)=>s+finance[b].balance,0);
+
+    // 세부내역
+    const auditRows = [
+      '회비','가입비','찬조금','회원구매 셔틀콕','레슨비','예금이자',
+      '운영비','행사비','코치 레슨비','정수기 렌탈료','소득세&지방세'
+    ];
+    const detail = {};
+    auditRows.forEach(r => { detail[r] = { income:0, expense:0, memo:'' }; });
+
+    allTxs.forEach(t => {
+      if(t.type==='income' && t.memo!=='이월') {
+        const cat = AUDIT_CAT_MAP[t.cat];
+        if(cat && detail[cat]) detail[cat].income += t.amount;
+      } else if(t.type==='expense') {
+        if(t.cat==='레슨비') {
+          detail['코치 레슨비'].expense += t.amount;
+        } else {
+          const cat = AUDIT_CAT_MAP[t.cat];
+          if(cat && detail[cat]) detail[cat].expense += t.amount;
+        }
+      }
+    });
+    return { finance, totalIncome, totalExpense, totalBalance, detail, auditRows };
+  }
+
+  const won = n => n ? n.toLocaleString()+'원' : '-';
+
+  try {
+    const allTxs   = loadTx();
+    const monthStr = document.getElementById('auditMonthSel')?.value || CURRENT_MONTH;
+    const yearMonth= `2026-${monthStr.padStart(2,'0')}`;  // e.g. "2026-03"
+    const monthLabel = `${yearMonth.slice(0,4)}년 ${parseInt(monthStr)}월`;
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // STEP 1: 신규 거래내역 노션 DB 추가
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    logStep(`① 신규 거래내역 동기화`);
+    const toSync = allTxs.filter(t => t.source !== 'notion' && t.month === monthStr);
+
+    if (toSync.length === 0) {
+      log('  이미 모두 동기화됨', '#4caf50');
+    } else {
+      log(`  대상: ${toSync.length}건`, '#fff');
+      const typeMap = { income:'수입', expense:'지출' };
+      const toSyncData = toSync.map(t => ({
+        항목:     t.name || t.memo || '미상',
+        일자:     t.date,
+        통장:     t.bank,
+        유형:     (t.memo==='이월') ? '이월' : (typeMap[t.type]||'수입'),
+        카테고리: t.cat || '기타',
+        금액:     t.amount,
+        상세:     t.memo || '',
+        월:       yearMonth,
+      }));
+
+      btnText.textContent = '① 거래내역 추가 중...';
+      const r1 = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514', max_tokens:4000,
+          mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion-mcp'}],
+          messages:[{role:'user', content:
+            `신화클럽 재무 노션 DB(data_source_id: 7fc7ad0a-97f0-47c6-bbba-07f598dd051e)에 아래 거래내역을 추가해줘.\n`+
+            `각 항목을 개별 페이지로 생성해줘. 필드: 항목(title), 일자(date:일자:start), 통장(select), 유형(select), 카테고리(select), 금액(number), 상세(text), 월(text).\n`+
+            `추가할 항목 ${toSyncData.length}건:\n${JSON.stringify(toSyncData)}\n`+
+            `완료 후 "추가완료:N건" 형식으로만 답해줘.`
+          }]
+        })
+      });
+      const d1 = await r1.json();
+      const t1  = (d1.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const added = t1.match(/추가완료:(\d+)건/)?.[1] || '?';
+      log(`  ✅ ${added}건 추가 완료`, '#4caf50');
+
+      // source 업데이트
+      const ids = new Set(toSync.map(t=>t.id));
+      saveTx(allTxs.map(t => ids.has(t.id) ? {...t, source:'notion'} : t));
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // STEP 2: 월별 결산 요약 페이지 생성
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    logStep(`② ${monthLabel} 결산 요약 페이지 생성`);
+    btnText.textContent = '② 결산 요약 생성 중...';
+
+    const { finance, totalIncome, totalExpense, totalBalance } = calcAuditData(monthStr);
+    const summaryContent =
+`## 📊 재무현황
+
+| 통장 | 이월 | 수입 | 지출 | 잔액 |
+|------|------|------|------|------|
+| 회비 | ${won(finance['회비'].carryover)} | ${won(finance['회비'].income)} | ${won(finance['회비'].expense)} | ${won(finance['회비'].balance)} |
+| 셔틀콕 | ${won(finance['셔틀콕'].carryover)} | ${won(finance['셔틀콕'].income)} | ${won(finance['셔틀콕'].expense)} | ${won(finance['셔틀콕'].balance)} |
+| 레슨비 | ${won(finance['레슨비'].carryover)} | ${won(finance['레슨비'].income)} | ${won(finance['레슨비'].expense)} | ${won(finance['레슨비'].balance)} |
+| **합계** | - | **${won(totalIncome)}** | **${won(totalExpense)}** | **${won(totalBalance)}** |
+
+## 📝 메모
+
+- 작성일: ${new Date().toLocaleDateString('ko-KR')}
+- 재무이사: 유정환
+`;
+
+    const r2 = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:2000,
+        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion-mcp'}],
+        messages:[{role:'user', content:
+          `신화클럽 재무관리 노션 페이지(317018c5-9275-808c-a522-d1611e3cd2e8) 아래에 ` +
+          `"${monthLabel} 결산 요약"이라는 제목의 페이지를 만들고 아래 내용을 넣어줘.\n\n${summaryContent}\n\n` +
+          `완료 후 "생성완료" 라고만 답해줘.`
+        }]
+      })
+    });
+    const d2 = await r2.json();
+    const t2  = (d2.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    log(`  ✅ ${t2.includes('생성완료')?'페이지 생성 완료':'처리됨'}`, '#4caf50');
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // STEP 3: 감사보고서 내용 기록
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    logStep(`③ ${monthLabel} 감사보고서 기록`);
+    btnText.textContent = '③ 감사보고서 기록 중...';
+
+    const { detail, auditRows } = calcAuditData(monthStr);
+    const detailRows = auditRows.map(r =>
+      `| ${r} | ${detail[r].income ? detail[r].income.toLocaleString() : '-'} | ${detail[r].expense ? detail[r].expense.toLocaleString() : '-'} |`
+    ).join('\n');
+
+    const auditContent =
+`## 💰 재무현황 (구글시트 C11 기준)
+
+| 통장 | 이월 | 수입 | 지출 | 잔액 |
+|------|------|------|------|------|
+| 회비 | ${won(finance['회비'].carryover)} | ${won(finance['회비'].income)} | ${won(finance['회비'].expense)} | ${won(finance['회비'].balance)} |
+| 셔틀콕 | ${won(finance['셔틀콕'].carryover)} | ${won(finance['셔틀콕'].income)} | ${won(finance['셔틀콕'].expense)} | ${won(finance['셔틀콕'].balance)} |
+| 레슨비 | ${won(finance['레슨비'].carryover)} | ${won(finance['레슨비'].income)} | ${won(finance['레슨비'].expense)} | ${won(finance['레슨비'].balance)} |
+
+## 📋 세부내역 (구글시트 D18 기준)
+
+| 과목 | 수입 | 지출 |
+|------|------|------|
+${detailRows}
+
+## 📌 비고
+
+- 작성일: ${new Date().toLocaleDateString('ko-KR')}
+- 재무이사: 유정환
+- 구글시트 연동 완료
+`;
+
+    const r3 = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:2000,
+        mcp_servers:[{type:'url',url:'https://mcp.notion.com/mcp',name:'notion-mcp'}],
+        messages:[{role:'user', content:
+          `신화클럽 재무관리 노션 페이지(317018c5-9275-808c-a522-d1611e3cd2e8) 아래에 ` +
+          `"${monthLabel} 감사보고서"라는 제목의 페이지를 만들고 아래 내용을 넣어줘.\n\n${auditContent}\n\n` +
+          `완료 후 "생성완료" 라고만 답해줘.`
+        }]
+      })
+    });
+    const d3 = await r3.json();
+    const t3  = (d3.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    log(`  ✅ ${t3.includes('생성완료')?'페이지 생성 완료':'처리됨'}`, '#4caf50');
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 완료
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    log('');
+    log('🎉 노션 정리 완료!', '#4caf50');
+    btnText.textContent = '✅ 정리 완료';
+
+  } catch (err) {
+    log('❌ 오류: ' + err.message, '#f87171');
+    btnText.textContent = '🗂️ 노션으로 내보내기';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -2130,9 +2376,16 @@ function parseCsvContent(text) {
   if(dataStart < 0) { showToast('올바른 카카오뱅크 CSV 형식이 아닙니다'); return; }
 
   const existing = loadTx();
-  const existingKeys = new Set(existing.map(t => t.date + '_' + t.amount + '_' + t.item));
+  // 중복 감지: 날짜+금액 조합으로 비교 (노션/CSV 항목명이 달라도 같은 거래 인식)
+  // 같은 날 같은 금액이 여러 건 있을 수 있어서 카운트 방식 사용
+  const existingCountMap = {};
+  existing.forEach(t => {
+    const k = t.date + '_' + t.amount;
+    existingCountMap[k] = (existingCountMap[k] || 0) + 1;
+  });
 
   csvParsed = [];
+  csvParsed._csvCountMap = {};
   for(let i=dataStart; i<lines.length; i++) {
     const row = parseCSVRow(lines[i]);
     if(!row || row.length < 6) continue;
@@ -2150,8 +2403,13 @@ function parseCsvContent(text) {
     // 날짜 변환: 2026.03.09 → 2026-03-09
     const date = rawDate.slice(0,10).replace(/\./g,'-');
     const item  = detail || memo || '미상';
-    const key   = date + '_' + amount + '_' + item;
-    const isDup = existingKeys.has(key);
+    const key   = date + '_' + amount;
+
+    // 같은 날짜+금액이 기존에 몇 건인지, CSV에서 몇 번째 등장인지 비교
+    if(!csvParsed._csvCountMap) csvParsed._csvCountMap = {};
+    csvParsed._csvCountMap[key] = (csvParsed._csvCountMap[key] || 0) + 1;
+    const csvCount = csvParsed._csvCountMap[key];
+    const isDup = (existingCountMap[key] || 0) >= csvCount;
 
     // 카테고리 자동 분류
     let category = csvBank === '셔틀콕' ? '셔틀콕' : csvBank === '레슨비' ? '레슨비' : '기타';
@@ -2225,12 +2483,13 @@ function applyCsvTransactions() {
     id: 'csv_' + now + '_' + i,
     date: r.date,
     month: String(parseInt(r.date.slice(5,7))),
-    account: r.account,
+    bank: r.account,       // account → bank (노션 데이터와 통일)
+    cat: r.category,       // category → cat (노션 데이터와 통일)
     type: r.txType,
-    category: r.category,
     amount: r.amount,
-    item: r.item,
-    detail: r.memo,
+    name: r.item,          // item → name (노션 데이터와 통일)
+    memo: r.memo || '',
+    source: 'csv',
   }));
   saveTx([...existing, ...toAdd]);
   showToast(`✅ ${toAdd.length}건 반영 완료!`);
