@@ -578,6 +578,26 @@
     font-family: 'Pretendard', sans-serif;
   }
   .bank-tab.active { border-color: var(--green-light); color: var(--green-bright); background: rgba(82,183,136,0.1); }
+
+  /* ── 셔틀콕 예약 ── */
+  .cok-reserve-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: var(--surface3); margin-bottom: 6px;
+  }
+  .cok-reserve-item.matched {
+    background: rgba(82,183,136,0.12);
+    border: 1px solid rgba(82,183,136,0.3);
+  }
+  .cok-reserve-item.matched .cok-badge { background: #2d6a4f; color: #95d5b2; }
+  .cok-badge {
+    font-size: 11px; font-weight: 700; padding: 3px 8px;
+    border-radius: 20px; background: rgba(255,255,255,0.07);
+    color: var(--text-muted); white-space: nowrap;
+  }
+  .cok-name { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+  .cok-qty  { font-size: 13px; color: var(--green-bright); font-weight: 700; white-space: nowrap; }
+  .cok-amt  { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -632,6 +652,7 @@
   <button class="tab-btn" onclick="switchTab('income')" id="tab-income">💰 입금기록</button>
   <button class="tab-btn" onclick="switchTab('expense')" id="tab-expense">📤 지출입력</button>
   <button class="tab-btn" onclick="switchTab('csv')" id="tab-csv">📂 CSV</button>
+  <button class="tab-btn" onclick="switchTab('cok')" id="tab-cok">🏸 콕예약</button>
   <button class="tab-btn" onclick="switchTab('audit')" id="tab-audit">📋 감사보고서</button>
   <button class="tab-btn" onclick="switchTab('assoc')" id="tab-assoc">🏅 협회비</button>
   <button class="tab-btn" onclick="switchTab('members')" id="tab-members">👥 회원현황</button>
@@ -848,6 +869,59 @@
       <div class="card-title">이번달 지출 내역</div>
       <div class="tx-list scroll-area" id="expenseTxList">
         <div class="empty-state"><div class="empty-icon">📤</div><p>아직 기록이 없어요</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ━━━━━━━━━━━━━━━ 셔틀콕 예약 (관리자 전용) ━━━━━━━━━━━━━━━ -->
+  <div class="section" id="sec-cok">
+    <div class="section-header">
+      <div>
+        <div class="section-title">🏸 셔틀콕 예약 관리</div>
+        <div class="section-sub">카톡 내용 붙여넣기 → 예약 저장 → CSV 업로드 시 자동 매칭</div>
+      </div>
+    </div>
+
+    <!-- 카톡 붙여넣기 -->
+    <div class="card">
+      <div class="card-title">📋 카톡 내용 붙여넣기</div>
+      <textarea id="cokKakaoPaste"
+        style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
+        placeholder="예시:
+김진상 2통
+지성근 2통
+45통"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;">
+        <button onclick="parseCokKakao()"
+          style="flex:1;background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+          🔍 예약 파싱
+        </button>
+        <button onclick="clearCokInput()"
+          style="background:rgba(255,255,255,0.06);color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:13px;cursor:pointer;">
+          지우기
+        </button>
+      </div>
+      <!-- 파싱 미리보기 -->
+      <div id="cokParsePreview" style="display:none;margin-top:12px;"></div>
+      <button id="cokSaveBtn" onclick="saveCokReservations()" style="display:none;width:100%;margin-top:8px;background:var(--green-light);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
+        ✅ 예약 저장
+      </button>
+    </div>
+
+    <!-- 현재 예약 목록 -->
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div class="card-title" style="margin:0">📦 현재 예약 목록</div>
+        <button onclick="clearAllCokReservations()"
+          style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;">
+          전체 삭제
+        </button>
+      </div>
+      <div id="cokReserveList">
+        <div class="empty-state" style="padding:20px 0;">
+          <div class="empty-icon">🏸</div>
+          <p>저장된 예약이 없어요</p>
+        </div>
       </div>
     </div>
   </div>
@@ -1242,6 +1316,69 @@
 
 </div><!-- .main -->
 
+<!-- 거래내역 수정 모달 -->
+<div id="txEditModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:1100;overflow-y:auto;padding:20px;">
+  <div style="max-width:480px;margin:0 auto;background:var(--surface);border-radius:20px;padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+      <div style="font-size:17px;font-weight:700;color:var(--text);" id="txEditTitle">✏️ 거래내역 수정</div>
+      <button onclick="closeTxEditModal()" style="background:none;border:none;color:var(--text-muted);font-size:22px;cursor:pointer;line-height:1;">✕</button>
+    </div>
+    <input type="hidden" id="txEdit-id" />
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">날짜</label>
+        <input type="date" class="form-control" id="txEdit-date" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">통장</label>
+        <select class="form-control" id="txEdit-bank">
+          <option value="회비">💳 회비</option>
+          <option value="레슨비">🏋️ 레슨비</option>
+          <option value="셔틀콕">🏸 셔틀콕</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">카테고리</label>
+        <select class="form-control" id="txEdit-cat">
+          <optgroup label="수입">
+            <option value="회비">회비</option>
+            <option value="레슨비">레슨비</option>
+            <option value="셔틀콕">셔틀콕</option>
+            <option value="찬조금">찬조금</option>
+            <option value="입회비">입회비</option>
+            <option value="내부이체">내부이체</option>
+            <option value="기타">기타</option>
+          </optgroup>
+          <optgroup label="지출">
+            <option value="이용료">이용료</option>
+            <option value="회식비">회식비</option>
+            <option value="협회비">협회비</option>
+            <option value="간식비">간식비</option>
+            <option value="비품">비품</option>
+            <option value="단체복">단체복</option>
+          </optgroup>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">금액 (원)</label>
+        <input type="number" class="form-control" id="txEdit-amount" />
+      </div>
+      <div class="form-group full">
+        <label class="form-label">항목 / 이름</label>
+        <input type="text" class="form-control" id="txEdit-name" />
+      </div>
+      <div class="form-group full">
+        <label class="form-label">메모</label>
+        <input type="text" class="form-control" id="txEdit-memo" />
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
+      <button onclick="closeTxEditModal()" style="background:rgba(255,255,255,.06);color:var(--text-muted);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;cursor:pointer;">취소</button>
+      <button onclick="saveTxEdit()" style="background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">✅ 저장</button>
+    </div>
+  </div>
+</div>
+
 <!-- 토스트 -->
 <div class="toast" id="toast">✅ 기록 완료!</div>
 
@@ -1411,7 +1548,7 @@ const CURRENT_MONTH = String(new Date().getMonth() + 1);
 // ══════════════════════════════════════════
 function switchTab(tab) {
   // 관리자 전용 탭 접근 차단
-  const adminTabs = ['income','expense','csv','audit'];
+  const adminTabs = ['income','expense','csv','cok','audit'];
   if(adminTabs.includes(tab) && !isAdmin) {
     openPin(tab); return;
   }
@@ -1427,6 +1564,7 @@ function switchTab(tab) {
   if(tab==='expense') renderExpenseTx();
   if(tab==='assoc') renderAssoc();
   if(tab==='csv') renderCsvTab();
+  if(tab==='cok') renderCokTab();
   if(tab==='audit') initAuditMonthSel();
 }
 
@@ -1475,6 +1613,15 @@ function initNotionData() {
       else if(t.type === 'expense') bal[t.bank] -= t.amount;
     });
     saveBalance(bal);
+
+    // ── 노션 회비 입금 항목: detail에서 납입월 파싱 → 회원 자동 반영 ──
+    toAdd.forEach(t => {
+      if(t.bank !== '회비' || t.type !== 'income' || t.memo === '이월') return;
+      const memoText = (t.memo || '') + ' ' + (t.name || '');
+      const parsedMonths = parseMonthsFromMemo(memoText);
+      const months = parsedMonths.length ? parsedMonths : [t.month];
+      applyMonthsToMember(t.name, months);
+    });
   }
 }
 
@@ -1614,7 +1761,7 @@ function parseKakao() {
 function recordFromKakao(name, amount, bank, cat) {
   if(!amount) { alert('금액을 확인해주세요'); return; }
   const tx = {
-    id: Date.now(),
+    id: 'tx_' + Date.now(),
     date: today(),
     type: 'income',
     bank, cat,
@@ -1655,7 +1802,7 @@ function addTransaction(type) {
   if(!amount) { alert('금액을 입력해주세요'); return; }
 
   const tx = {
-    id: Date.now(), date, type, bank, cat, name, memo, amount,
+    id: 'tx_' + Date.now(), date, type, bank, cat, name, memo, amount,
     month: String(new Date(date).getMonth() + 1),
   };
   const txs = loadTx();
@@ -1722,7 +1869,9 @@ function renderHome() {
   }
 }
 
-function renderTxItem(t, showOrder, idx, total) {
+function renderTxItem(t, showOrder, idx, total, showEdit) {
+  if(!t) return '';
+  t = Object.assign({ name:'', cat:'기타', bank:'회비', type:'income', amount:0, date:'', memo:'', id:'' }, t);
   const cls = t.type === 'income' ? 'income' : 'expense';
   const bankCls = { '회비':'bank-hoebi', '레슨비':'bank-lesson', '셔틀콕':'bank-shuttlecock' }[t.bank] || '';
   const sign = t.type === 'income' ? '+' : '-';
@@ -1730,6 +1879,12 @@ function renderTxItem(t, showOrder, idx, total) {
     ? `<div class="tx-order-btns">
         <button class="tx-order-btn" onclick="moveTxOrder('${t.id}',-1)" ${idx===0?'disabled':''}>▲</button>
         <button class="tx-order-btn" onclick="moveTxOrder('${t.id}',1)" ${idx===total-1?'disabled':''}>▼</button>
+       </div>`
+    : '';
+  const editBtns = showEdit
+    ? `<div style="display:flex;gap:4px;margin-left:6px;">
+        <button onclick="openTxEditModal('${t.id}')" style="font-size:11px;padding:3px 8px;background:rgba(82,183,136,.15);color:var(--green-bright);border:1px solid rgba(82,183,136,.3);border-radius:6px;cursor:pointer;">수정</button>
+        <button onclick="deleteTx('${t.id}')" style="font-size:11px;padding:3px 8px;background:rgba(230,57,70,.1);color:var(--red-soft);border:1px solid rgba(230,57,70,.25);border-radius:6px;cursor:pointer;">삭제</button>
        </div>`
     : '';
   return `
@@ -1742,6 +1897,7 @@ function renderTxItem(t, showOrder, idx, total) {
       </div>
       <span class="tx-bank-tag ${bankCls}">${t.bank}</span>
       <div class="tx-amount ${cls}">${sign}${fmtMoney(t.amount)}</div>
+      ${editBtns}
     </div>
   `;
 }
@@ -1751,7 +1907,7 @@ function renderIncomeTx() {
   const el = document.getElementById('incomeTxList');
   el.innerHTML = txs.length === 0
     ? '<div class="empty-state"><div class="empty-icon">💰</div><p>아직 기록이 없어요</p></div>'
-    : txs.map(t => renderTxItem(t)).join('');
+    : txs.map(t => renderTxItem(t, false, undefined, undefined, true)).join('');
 }
 
 function renderExpenseTx() {
@@ -1759,7 +1915,7 @@ function renderExpenseTx() {
   const el = document.getElementById('expenseTxList');
   el.innerHTML = txs.length === 0
     ? '<div class="empty-state"><div class="empty-icon">📤</div><p>아직 기록이 없어요</p></div>'
-    : txs.map(t => renderTxItem(t)).join('');
+    : txs.map(t => renderTxItem(t, false, undefined, undefined, true)).join('');
 }
 
 function renderMembers() {
@@ -2823,7 +2979,7 @@ function showToast(msg) {
 const ADMIN_PIN = '1123'; // 재무 PIN
 
 function updateTabVisibility() {
-  const adminTabs = ['income','expense','csv','audit'];
+  const adminTabs = ['income','expense','csv','cok','audit'];
   adminTabs.forEach(t => {
     const el = document.getElementById('tab-' + t);
     if(el) el.style.display = isAdmin ? '' : 'none';
@@ -3134,9 +3290,297 @@ function applyMonthsToMember(memberName, newMonths) {
   return true;
 }
 
+// ══════════════════════════════════════════
+//  거래내역 수정 / 삭제
+// ══════════════════════════════════════════
+function openTxEditModal(id) {
+  // id가 숫자로 저장된 구버전 데이터도 매칭
+  const tx = loadTx().find(t => String(t.id) === String(id));
+  if(!tx) return;
+
+  document.getElementById('txEdit-id').value    = tx.id;
+  document.getElementById('txEdit-date').value  = tx.date;
+  document.getElementById('txEdit-bank').value  = tx.bank;
+  document.getElementById('txEdit-cat').value   = tx.cat;
+  document.getElementById('txEdit-amount').value = tx.amount;
+  document.getElementById('txEdit-name').value  = tx.name || '';
+  document.getElementById('txEdit-memo').value  = tx.memo || '';
+  document.getElementById('txEditTitle').textContent =
+    tx.type === 'income' ? '✏️ 입금 수정' : '✏️ 지출 수정';
+
+  document.getElementById('txEditModal').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeTxEditModal() {
+  document.getElementById('txEditModal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function saveTxEdit() {
+  const id     = document.getElementById('txEdit-id').value;
+  const date   = document.getElementById('txEdit-date').value;
+  const bank   = document.getElementById('txEdit-bank').value;
+  const cat    = document.getElementById('txEdit-cat').value;
+  const amount = parseInt(document.getElementById('txEdit-amount').value);
+  const name   = document.getElementById('txEdit-name').value.trim();
+  const memo   = document.getElementById('txEdit-memo').value.trim();
+
+  if(!date || !amount) { alert('날짜와 금액은 필수입니다'); return; }
+
+  const allTxs = loadTx();
+  const idx = allTxs.findIndex(t => String(t.id) === String(id));
+  if(idx < 0) { alert('항목을 찾을 수 없습니다'); return; }
+
+  const updated = {
+    ...allTxs[idx],
+    date, bank, cat, amount, name, memo,
+    month: String(parseInt(date.slice(5,7))),
+  };
+  allTxs[idx] = updated;
+  saveTx(allTxs);
+
+  // 잔액 재계산
+  recalcBalance();
+
+  closeTxEditModal();
+  showToast('✅ 수정 완료!');
+  renderIncomeTx();
+  renderExpenseTx();
+  renderHome();
+}
+
+function deleteTx(id) {
+  if(!confirm('이 항목을 삭제할까요?')) return;
+  const allTxs = loadTx().filter(t => String(t.id) !== String(id));
+  saveTx(allTxs);
+  recalcBalance();
+  showToast('🗑️ 삭제 완료');
+  renderIncomeTx();
+  renderExpenseTx();
+  renderHome();
+}
+
+function recalcBalance() {
+  const allTxs = loadTx();
+  const bal = { 회비: 0, 레슨비: 0, 셔틀콕: 0 };
+  allTxs.forEach(t => {
+    if(!bal.hasOwnProperty(t.bank)) return;
+    if(t.type === 'income') bal[t.bank] += t.amount;
+    else if(t.type === 'expense') bal[t.bank] -= t.amount;
+  });
+  saveBalance(bal);
+}
+
+
+// ══════════════════════════════════════════
+const COK_RESERVE_KEY = 'sinwha_cok_reservations';
+const COK_PRICE = 20000; // 1통 단가
+
+function loadCokReservations() {
+  try { return JSON.parse(localStorage.getItem(COK_RESERVE_KEY) || '[]'); } catch { return []; }
+}
+function saveCokReservations_store(arr) {
+  localStorage.setItem(COK_RESERVE_KEY, JSON.stringify(arr));
+}
+
+// 카톡 텍스트 파싱: "김진상 2통\n지성근 2통\n45통" → [{name, qty}]
+function parseCokText(text) {
+  const lines = text.trim().split(/\n/);
+  const results = [];
+  lines.forEach(line => {
+    line = line.trim();
+    if(!line) return;
+    // "이름 N통" 패턴
+    const m = line.match(/^(.+?)\s+(\d+)\s*통$/);
+    if(m) {
+      const name = m[1].trim();
+      const qty  = parseInt(m[2]);
+      // 숫자만 있는 줄 (잔여 합계) 제외
+      if(/^\d+$/.test(name)) return;
+      results.push({ name, qty, amount: qty * COK_PRICE });
+    }
+    // 숫자만 있는 줄 → 잔여 합계, 무시
+  });
+  return results;
+}
+
+// 파싱 미리보기
+function parseCokKakao() {
+  const text = document.getElementById('cokKakaoPaste').value;
+  const parsed = parseCokText(text);
+  const preview = document.getElementById('cokParsePreview');
+  const saveBtn = document.getElementById('cokSaveBtn');
+
+  if(parsed.length === 0) {
+    preview.style.display = 'block';
+    preview.innerHTML = '<div style="color:var(--red-soft);font-size:13px;padding:8px;">인식된 항목이 없어요. "이름 N통" 형식인지 확인해주세요.</div>';
+    saveBtn.style.display = 'none';
+    return;
+  }
+
+  preview.style.display = 'block';
+  preview.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;font-weight:600;">인식된 예약 ${parsed.length}건</div>
+    ${parsed.map(r => `
+      <div class="cok-reserve-item">
+        <div class="cok-name">${r.name}</div>
+        <div class="cok-qty">${r.qty}통</div>
+        <div class="cok-amt">${r.amount.toLocaleString()}원</div>
+      </div>
+    `).join('')}
+    <div style="text-align:right;font-size:12px;color:var(--text-muted);margin-top:6px;">
+      합계: <b style="color:var(--accent)">${parsed.reduce((s,r)=>s+r.qty,0)}통 / ${parsed.reduce((s,r)=>s+r.amount,0).toLocaleString()}원</b>
+    </div>
+  `;
+  saveBtn.style.display = 'block';
+  saveBtn._parsed = parsed;
+}
+
+function saveCokReservations() {
+  const btn = document.getElementById('cokSaveBtn');
+  const parsed = btn._parsed;
+  if(!parsed || !parsed.length) return;
+
+  const existing = loadCokReservations();
+  const now = Date.now();
+  const newItems = parsed.map((r, i) => ({
+    id: 'cok_' + now + '_' + i,
+    name: r.name,
+    qty: r.qty,
+    amount: r.amount,
+    matched: false,
+    savedAt: new Date().toLocaleDateString('ko-KR'),
+  }));
+
+  saveCokReservations_store([...existing, ...newItems]);
+  showToast(`✅ ${newItems.length}건 예약 저장 완료!`);
+
+  // 입력창 초기화
+  document.getElementById('cokKakaoPaste').value = '';
+  document.getElementById('cokParsePreview').style.display = 'none';
+  btn.style.display = 'none';
+  renderCokTab();
+}
+
+function clearCokInput() {
+  document.getElementById('cokKakaoPaste').value = '';
+  document.getElementById('cokParsePreview').style.display = 'none';
+  document.getElementById('cokSaveBtn').style.display = 'none';
+}
+
+function clearAllCokReservations() {
+  if(!confirm('예약 목록을 전체 삭제할까요?')) return;
+  saveCokReservations_store([]);
+  renderCokTab();
+  showToast('🗑️ 예약 목록 삭제됨');
+}
+
+function deleteCokReservation(id) {
+  const list = loadCokReservations().filter(r => r.id !== id);
+  saveCokReservations_store(list);
+  renderCokTab();
+}
+
+function renderCokTab() {
+  const list = loadCokReservations();
+  const el = document.getElementById('cokReserveList');
+  if(!el) return;
+
+  if(list.length === 0) {
+    el.innerHTML = '<div class="empty-state" style="padding:20px 0;"><div class="empty-icon">🏸</div><p>저장된 예약이 없어요</p></div>';
+    return;
+  }
+
+  const pending  = list.filter(r => !r.matched);
+  const matched  = list.filter(r =>  r.matched);
+
+  let html = '';
+  if(pending.length) {
+    html += `<div style="font-size:12px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">⏳ 입금 대기 (${pending.length}건)</div>`;
+    html += pending.map(r => `
+      <div class="cok-reserve-item">
+        <div class="cok-name">${r.name}</div>
+        <div class="cok-qty">${r.qty}통</div>
+        <div class="cok-amt">${r.amount.toLocaleString()}원</div>
+        <button onclick="deleteCokReservation('${r.id}')"
+          style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;margin-left:4px;">✕</button>
+      </div>
+    `).join('');
+  }
+  if(matched.length) {
+    html += `<div style="font-size:12px;color:var(--green-bright);font-weight:600;margin:12px 0 6px;">✅ 입금 완료 (${matched.length}건)</div>`;
+    html += matched.map(r => `
+      <div class="cok-reserve-item matched">
+        <div class="cok-badge">완료</div>
+        <div class="cok-name">${r.name}</div>
+        <div class="cok-qty">${r.qty}통</div>
+        <div class="cok-amt">${r.amount.toLocaleString()}원</div>
+        <button onclick="deleteCokReservation('${r.id}')"
+          style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;margin-left:4px;">✕</button>
+      </div>
+    `).join('');
+  }
+
+  const totalPending = pending.reduce((s,r)=>s+r.amount,0);
+  html += `<div style="text-align:right;font-size:12px;color:var(--text-muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border);">
+    미입금 합계: <b style="color:var(--yellow)">${pending.reduce((s,r)=>s+r.qty,0)}통 / ${totalPending.toLocaleString()}원</b>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+// CSV 업로드 시 셔틀콕 예약과 금액 매칭
+function matchCokReservations(csvItems) {
+  const reserves = loadCokReservations().filter(r => !r.matched);
+  if(reserves.length === 0) return csvItems;
+
+  // 이름 정규화
+  const normName = s => s.replace(/\s+/g,'').toLowerCase();
+
+  let updated = [...loadCokReservations()];
+  let matchCount = 0;
+
+  csvItems = csvItems.map(item => {
+    if(item.txType !== 'income') return item;
+
+    // 1) 이름 직접 매칭
+    const itemName = normName(item.item || '');
+    let reserve = reserves.find(r => normName(r.name) === itemName && r.amount === item.amount);
+
+    // 2) 금액만 매칭 (이름 없는 경우)
+    if(!reserve) {
+      reserve = reserves.find(r => r.amount === item.amount && !r._usedByAmount);
+    }
+
+    if(reserve) {
+      // 예약 매칭 표시
+      const idx = updated.findIndex(r => r.id === reserve.id);
+      if(idx >= 0) { updated[idx] = { ...updated[idx], matched: true }; }
+      reserve._usedByAmount = true; // 중복 방지
+      matchCount++;
+      // item 이름을 예약자 이름으로 덮어쓰기 (이름 없을 때)
+      return { ...item, item: reserve.name, name: reserve.name };
+    }
+    return item;
+  });
+
+  if(matchCount > 0) {
+    saveCokReservations_store(updated);
+    showToast(`🏸 셔틀콕 예약 ${matchCount}건 자동 매칭!`);
+  }
+  return csvItems;
+}
+
+
 function applyCsvTransactions() {
-  const newItems = csvParsed.filter(r => !r.isDup);
+  let newItems = csvParsed.filter(r => !r.isDup);
   if(newItems.length === 0) return;
+
+  // ── 셔틀콕 통장: 예약 자동 매칭 ──
+  if(csvBank === '셔틀콕') {
+    newItems = matchCokReservations(newItems);
+  }
   const existing = loadTx();
   const now = Date.now();
   const toAdd = newItems.map((r, i) => ({
