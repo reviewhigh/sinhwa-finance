@@ -19,7 +19,7 @@
   script-src 'self' 'unsafe-inline';
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self' https://mcp.notion.com;
+  connect-src 'self' https://mcp.notion.com https://wtcuynkpccyxupiclokm.supabase.co;
   img-src 'self' data:;
   frame-ancestors 'none';
   form-action 'none';
@@ -669,6 +669,7 @@
         <div class="section-title">재무 현황</div>
         <div class="section-sub" id="homeSubtitle"></div>
       </div>
+      <button onclick="syncFromSupabase()" style="background:var(--green);color:var(--text);border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600;">☁️ 동기화</button>
     </div>
 
     <!-- 잔액 카드 -->
@@ -1394,22 +1395,108 @@ var memberFilter = '전체';
 var editId = null;
 
 // ══════════════════════════════════════════
-//  데이터 스토어 (로컬스토리지)
+//  Supabase 설정
+// ══════════════════════════════════════════
+const SB_URL = 'https://wtcuynkpccyxupiclokm.supabase.co';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0Y3V5bmtwY2N5eHVwaWNsb2ttIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyMzMwMjIsImV4cCI6MjA4ODgwOTAyMn0.eS-QGyOJvEkZf1_rctz_eiURsL-XrH2LKaUirz20QJ0';
+const SB_HEADERS = { 'Content-Type': 'application/json', 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY };
+
+async function sbGet(table, params='') {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { headers: SB_HEADERS });
+  if(!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+async function sbUpsert(table, data) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { ...SB_HEADERS, 'Prefer': 'resolution=merge-duplicates' },
+    body: JSON.stringify(data)
+  });
+  if(!r.ok) throw new Error(await r.text());
+}
+async function sbDelete(table, filter) {
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: SB_HEADERS });
+  if(!r.ok) throw new Error(await r.text());
+}
+
+// ══════════════════════════════════════════
+//  데이터 스토어 (Supabase + 로컬 캐시)
 // ══════════════════════════════════════════
 const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'sinwha_tx_order' };
 
+// ── TX (거래내역) ──────────────────────────
 function loadTx() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX) || '[]'); } catch { return []; }
 }
 function saveTx(arr) {
   localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
+  // Supabase 동기화 (비동기, 에러무시)
+  _syncTxToSB(arr).catch(e => console.warn('[SB] TX 동기화 실패:', e));
 }
+async function _syncTxToSB(arr) {
+  if(!arr.length) return;
+  await sbUpsert('transactions', arr);
+}
+
+// ── Balance ───────────────────────────────
 function loadBalance() {
   const def = { 회비: 0, 레슨비: 0, 셔틀콕: 0 };
   try { return { ...def, ...JSON.parse(localStorage.getItem(STORAGE_KEYS.BALANCE) || '{}') }; } catch { return def; }
 }
 function saveBalance(obj) {
   localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(obj));
+  sbUpsert('balance', { id: 'main', hoebi: obj['회비']||0, lessonbi: obj['레슨비']||0, shuttlecock: obj['셔틀콕']||0 })
+    .catch(e => console.warn('[SB] Balance 동기화 실패:', e));
+}
+
+// ── Supabase → 로컬 전체 동기화 ───────────
+async function syncFromSupabase() {
+  try {
+    showToast('☁️ 데이터 불러오는 중...', 2000);
+
+    // 거래내역
+    const txs = await sbGet('transactions', 'order=date.desc&limit=2000');
+    if(txs.length > 0) {
+      localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
+    }
+
+    // 잔액
+    const balRows = await sbGet('balance', 'id=eq.main');
+    if(balRows.length > 0) {
+      const b = balRows[0];
+      const balObj = { '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 };
+      localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(balObj));
+    }
+
+    // 회원 커스텀 데이터
+    const memRows = await sbGet('members', '');
+    if(memRows.length > 0) {
+      const mems = memRows.map(r => r.data);
+      localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
+    }
+
+    // 셔틀콕 예약
+    const cokRows = await sbGet('cok_reservations', '');
+    if(cokRows.length > 0) {
+      const coks = cokRows.map(r => r.data);
+      localStorage.setItem('sinwha_cok_reservations', JSON.stringify(coks));
+    }
+
+    // TX 순서
+    const orderRows = await sbGet('members', 'id=eq.__tx_order__');
+    if(orderRows.length > 0 && orderRows[0].data) {
+      localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(orderRows[0].data));
+    }
+
+    showToast('✅ 최신 데이터 반영 완료!', 2000);
+    renderHome();
+    renderIncomeTx();
+    renderExpenseTx();
+    renderMembers();
+  } catch(e) {
+    console.error('[SB] 동기화 실패:', e);
+    showToast('⚠️ 동기화 실패 - 로컬 데이터로 표시', 2500);
+  }
 }
 
 // ══════════════════════════════════════════
@@ -2602,6 +2689,14 @@ function loadCustomMembers() {
 }
 function saveCustomMembers(arr) {
   localStorage.setItem(MEMBERS_KEY, JSON.stringify(arr));
+  // Supabase 동기화
+  _syncMembersToSB(arr).catch(e => console.warn('[SB] Members 동기화 실패:', e));
+}
+async function _syncMembersToSB(arr) {
+  // 기존 전체 삭제 후 재삽입 (단순전략)
+  // members 테이블: id=회원_id, data=JSON
+  const rows = arr.map(m => ({ id: String(m._id), data: m }));
+  if(rows.length > 0) await sbUpsert('members', rows);
 }
 
 // ── 회원 통합 조회 ─────────────────────────────
@@ -3354,6 +3449,8 @@ function deleteTx(id) {
   if(!confirm('이 항목을 삭제할까요?')) return;
   const allTxs = loadTx().filter(t => String(t.id) !== String(id));
   saveTx(allTxs);
+  // Supabase에서도 삭제
+  sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('[SB] TX 삭제 실패:', e));
   recalcBalance();
   showToast('🗑️ 삭제 완료');
   renderIncomeTx();
@@ -3382,6 +3479,11 @@ function loadCokReservations() {
 }
 function saveCokReservations_store(arr) {
   localStorage.setItem(COK_RESERVE_KEY, JSON.stringify(arr));
+  _syncCokToSB(arr).catch(e => console.warn('[SB] Cok 동기화 실패:', e));
+}
+async function _syncCokToSB(arr) {
+  const rows = arr.map(c => ({ id: String(c.id), data: c }));
+  if(rows.length > 0) await sbUpsert('cok_reservations', rows);
 }
 
 // 카톡 텍스트 파싱: "김진상 2통\n지성근 2통\n45통" → [{name, qty}]
@@ -3641,9 +3743,11 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('ex-date').value = today();
 
   updateTabVisibility(); // 회원 모드로 시작 (관리자 탭 숨김)
-  renderHome();
   initNotionData();
-  renderHome(); // 노션 데이터 반영 후 재렌더
+  renderHome(); // 로컬 데이터 먼저 표시
+
+  // Supabase에서 최신 데이터 자동 로드
+  syncFromSupabase();
 });
 </script>
 </body>
