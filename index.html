@@ -3,6 +3,31 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- ══ 보안 헤더 (meta 적용 가능 범위) ══ -->
+<!-- XSS 필터 강제 활성화 -->
+<meta http-equiv="X-XSS-Protection" content="1; mode=block">
+<!-- 외부 페이지 삽입(클릭재킹) 방지 -->
+<meta http-equiv="X-Frame-Options" content="DENY">
+<!-- MIME 스니핑 방지 -->
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<!-- Referrer 정보 최소화 -->
+<meta name="referrer" content="no-referrer">
+<!-- CSP: 허용 출처 명시적 제한 -->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self' https://api.anthropic.com https://mcp.notion.com;
+  img-src 'self' data:;
+  frame-ancestors 'none';
+  form-action 'none';
+  base-uri 'self';
+">
+<!-- 검색엔진 인덱싱 차단 (내부 관리도구) -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+
 <title>🏸 신화 재무관리</title>
 <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -94,6 +119,23 @@
   }
   .mode-badge.admin  { background: rgba(82,183,136,.2); color: var(--green-bright); border: 1px solid var(--green); }
   .mode-badge.member { background: rgba(74,110,82,.12); color: var(--text-muted);   border: 1px solid var(--border); }
+
+  /* ── 전체 내역 순서 버튼 ── */
+  .tx-order-btns { display:flex; flex-direction:column; gap:2px; margin-right:8px; flex-shrink:0; }
+  .tx-order-btn {
+    background: rgba(74,110,82,.25);
+    border: 1px solid var(--green-mid);
+    color: var(--green-bright);
+    border-radius: 4px;
+    font-size: 10px;
+    width: 22px; height: 22px;
+    cursor: pointer;
+    display:flex; align-items:center; justify-content:center;
+    padding: 0;
+    transition: background .15s;
+  }
+  .tx-order-btn:hover:not(:disabled) { background: rgba(82,183,136,.3); }
+  .tx-order-btn:disabled { opacity:.3; cursor:default; }
 
   /* CSV 업로드 드롭존 */
   .csv-drop {
@@ -711,6 +753,7 @@
             <option value="셔틀콕">셔틀콕</option>
             <option value="찬조금">찬조금</option>
             <option value="입회비">입회비</option>
+            <option value="내부이체">내부이체</option>
             <option value="기타">기타</option>
           </select>
         </div>
@@ -780,6 +823,7 @@
               <option value="간식비">간식비</option>
               <option value="비품">비품</option>
               <option value="단체복">단체복</option>
+              <option value="내부이체">내부이체</option>
               <option value="기타">기타</option>
             </optgroup>
           </select>
@@ -1144,10 +1188,10 @@
     </div>
 
     <div class="bank-tabs">
-      <button class="bank-tab active" onclick="selectReportBank('전체',this)">전체</button>
-      <button class="bank-tab" onclick="selectReportBank('회비',this)">💳 회비</button>
-      <button class="bank-tab" onclick="selectReportBank('레슨비',this)">🏋️ 레슨비</button>
-      <button class="bank-tab" onclick="selectReportBank('셔틀콕',this)">🏸 셔틀콕</button>
+      <button class="bank-tab report-bank-tab active" data-bank="전체" onclick="selectReportBank('전체',this)">전체</button>
+      <button class="bank-tab report-bank-tab" data-bank="회비" onclick="selectReportBank('회비',this)">💳 회비</button>
+      <button class="bank-tab report-bank-tab" data-bank="레슨비" onclick="selectReportBank('레슨비',this)">🏋️ 레슨비</button>
+      <button class="bank-tab report-bank-tab" data-bank="셔틀콕" onclick="selectReportBank('셔틀콕',this)">🏸 셔틀콕</button>
     </div>
 
     <div class="card">
@@ -1172,7 +1216,10 @@
     </div>
 
     <div class="card">
-      <div class="card-title">이달 전체 내역</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+        <div class="card-title" style="margin-bottom:0">이달 전체 내역</div>
+        <button id="reportOrderEditBtn" onclick="resetTxOrder()" style="display:none;font-size:11px;padding:4px 10px;background:rgba(74,110,82,.3);border:1px solid var(--green-mid);color:var(--green-bright);border-radius:6px;cursor:pointer;">🔄 순서 초기화</button>
+      </div>
       <div class="tx-list scroll-area" id="reportTxList">
         <div class="empty-state"><div class="empty-icon">📊</div><p>이달 내역이 없어요</p></div>
       </div>
@@ -1199,7 +1246,7 @@ var editId = null;
 // ══════════════════════════════════════════
 //  데이터 스토어 (로컬스토리지)
 // ══════════════════════════════════════════
-const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance' };
+const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'sinwha_tx_order' };
 
 function loadTx() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX) || '[]'); } catch { return []; }
@@ -1662,12 +1709,19 @@ function renderHome() {
   }
 }
 
-function renderTxItem(t) {
+function renderTxItem(t, showOrder, idx, total) {
   const cls = t.type === 'income' ? 'income' : 'expense';
   const bankCls = { '회비':'bank-hoebi', '레슨비':'bank-lesson', '셔틀콕':'bank-shuttlecock' }[t.bank] || '';
   const sign = t.type === 'income' ? '+' : '-';
+  const orderBtns = (showOrder && typeof idx === 'number')
+    ? `<div class="tx-order-btns">
+        <button class="tx-order-btn" onclick="moveTxOrder('${t.id}',-1)" ${idx===0?'disabled':''}>▲</button>
+        <button class="tx-order-btn" onclick="moveTxOrder('${t.id}',1)" ${idx===total-1?'disabled':''}>▼</button>
+       </div>`
+    : '';
   return `
-    <div class="tx-item">
+    <div class="tx-item" data-id="${t.id}">
+      ${orderBtns}
       <div class="tx-dot ${cls}"></div>
       <div class="tx-info">
         <div class="tx-name">${t.name}</div>
@@ -1818,16 +1872,64 @@ function renderReport(bank) {
     `).join('');
   }
 
-  // 전체 내역
+  // 전체 내역 (저장된 순서 적용)
   const txEl = document.getElementById('reportTxList');
-  txEl.innerHTML = txs.length === 0
+  const sorted = applySavedOrder(txs);
+  txEl.innerHTML = sorted.length === 0
     ? '<div class="empty-state"><div class="empty-icon">📊</div><p>이달 내역이 없어요</p></div>'
-    : txs.map(t => renderTxItem(t)).join('');
+    : sorted.map((t,i) => renderTxItem(t, isAdmin, i, sorted.length)).join('');
+
+  // 관리자: 순서 편집 버튼 표시
+  const orderBtn = document.getElementById('reportOrderEditBtn');
+  if(orderBtn) orderBtn.style.display = isAdmin ? '' : 'none';
 }
 
 function catEmoji(cat) {
-  const map = { 회비:'💳', 레슨비:'🏋️', 셔틀콕:'🏸', 회식비:'🍻', 협회비:'🏅', 찬조금:'🎉', 단체복:'👕', 간식비:'🍡', 이용료:'🏟️', 비품:'🛒', 기타:'📝', 입회비:'🆕', 캐시백:'💸' };
+  const map = { 회비:'💳', 레슨비:'🏋️', 셔틀콕:'🏸', 회식비:'🍻', 협회비:'🏅', 찬조금:'🎉', 단체복:'👕', 간식비:'🍡', 이용료:'🏟️', 비품:'🛒', 기타:'📝', 입회비:'🆕', 캐시백:'💸', 내부이체:'🔄' };
   return map[cat] || '📌';
+}
+
+// ── 전체 내역 순서 관리 ─────────────────────────
+function loadTxOrder() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX_ORDER) || 'null'); } catch { return null; }
+}
+function saveTxOrder(arr) {
+  localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(arr));
+}
+
+// 저장된 순서 적용 (없으면 날짜순 기본)
+function applySavedOrder(txs) {
+  const order = loadTxOrder();
+  if(!order || !order.length) return [...txs].sort((a,b) => b.date.localeCompare(a.date) || (b.id||'').localeCompare(a.id||''));
+  const idxMap = {};
+  order.forEach((id, i) => { idxMap[id] = i; });
+  return [...txs].sort((a, b) => {
+    const ai = idxMap[a.id] ?? 99999;
+    const bi = idxMap[b.id] ?? 99999;
+    if(ai !== bi) return ai - bi;
+    return b.date.localeCompare(a.date);
+  });
+}
+
+// ▲▼ 버튼: 항목 한 칸씩 이동
+function moveTxOrder(txId, dir) {
+  const txs = loadTx().filter(t => t.month === CURRENT_MONTH);
+  let sorted = applySavedOrder(txs);
+  const cur = sorted.findIndex(t => t.id === txId);
+  if(cur < 0) return;
+  const next = cur + dir;
+  if(next < 0 || next >= sorted.length) return;
+  // 스왑
+  [sorted[cur], sorted[next]] = [sorted[next], sorted[cur]];
+  saveTxOrder(sorted.map(t => t.id));
+  renderReport(document.querySelector('.report-bank-tab.active')?.dataset.bank || '전체');
+}
+
+// 순서 초기화 (날짜순으로 되돌리기)
+function resetTxOrder() {
+  localStorage.removeItem(STORAGE_KEYS.TX_ORDER);
+  showToast('순서가 날짜순으로 초기화됐어요');
+  renderReport(document.querySelector('.report-bank-tab.active')?.dataset.bank || '전체');
 }
 
 // ══════════════════════════════════════════
@@ -2924,16 +3026,90 @@ function renderCsvResult() {
   const newItems = csvParsed.filter(r => !r.isDup);
   const dupItems = csvParsed.filter(r => r.isDup);
   title.textContent = `📋 파싱 결과 — 신규 ${newItems.length}건 / 중복 ${dupItems.length}건`;
-  list.innerHTML = csvParsed.map(r => `
+  list.innerHTML = csvParsed.map(r => {
+    // 회비 입금이면 납입월 미리 파싱해서 표시
+    let monthBadge = '';
+    if(csvBank === '회비' && r.txType === 'income' && !r.isDup) {
+      const memoText = (r.memo||'') + ' ' + (r.item||'');
+      const parsed = parseMonthsFromMemo(memoText);
+      if(parsed.length) {
+        monthBadge = ` <span style="font-size:10px;background:rgba(82,183,136,.2);color:var(--green-bright);border-radius:4px;padding:1px 5px;margin-left:4px;">${parsed.map(m=>m+'월').join(' ')}</span>`;
+      }
+    }
+    return `
     <div class="csv-item ${r.isDup ? 'skip' : 'new'}">
-      <span>${r.date} · ${r.txType==='income'?'🟢':'🔴'} ${r.item}</span>
-      <span>${r.isDup ? '중복' : '+' + r.amount.toLocaleString()}</span>
-    </div>
-  `).join('');
+      <span>${r.date} · ${r.txType==='income'?'🟢':'🔴'} ${r.item}${monthBadge}</span>
+      <span>${r.isDup ? '중복' : (r.txType==='income'?'+':'-') + r.amount.toLocaleString()}</span>
+    </div>`;
+  }).join('');
   const applyBtn = document.getElementById('csvApplyBtn');
   applyBtn.textContent = newItems.length > 0 ? `✅ 신규 ${newItems.length}건 반영하기` : '신규 항목 없음';
   applyBtn.disabled = newItems.length === 0;
   card.style.display = '';
+}
+
+// ── 메모에서 납입월 파싱 ─────────────────────
+// 패턴: 1-3회비→[1,2,3] / 3,4회비→[3,4] / 3회비→[3] / 3월→[3] / 1월회비→[1]
+function parseMonthsFromMemo(memo) {
+  if(!memo) return [];
+  const s = memo.replace(/\s+/g,' ');
+  const found = new Set();
+
+  // 패턴1: N-M회비 / N-M월 (범위)
+  [...s.matchAll(/(\d{1,2})\s*[-~]\s*(\d{1,2})\s*(?:회비|월)/g)].forEach(m => {
+    const [a, b] = [parseInt(m[1]), parseInt(m[2])];
+    if(a >= 1 && b <= 12 && a <= b) for(let i=a; i<=b; i++) found.add(i);
+  });
+
+  // 패턴2: N,M,K회비 / N,M월 (쉼표 나열)
+  [...s.matchAll(/(\d{1,2}(?:\s*,\s*\d{1,2})+)\s*(?:회비|월)/g)].forEach(m => {
+    m[1].split(',').forEach(x => { const v=parseInt(x); if(v>=1&&v<=12) found.add(v); });
+  });
+
+  // 패턴3: N회비 / N월 (단일) — 범위·나열 미해당 건만
+  [...s.matchAll(/(?<!\d)(\d{1,2})\s*(?:회비|월)/g)].forEach(m => {
+    const v = parseInt(m[1]);
+    if(v >= 1 && v <= 12) found.add(v);
+  });
+
+  return [...found].sort((a,b)=>a-b).map(String);
+}
+
+// ── 이름으로 회원 찾아 납입월 업데이트 ──────────
+function applyMonthsToMember(memberName, newMonths) {
+  if(!memberName || !newMonths.length) return false;
+
+  // 이름 정규화: "김용상(황안순)" 형태 처리, 앞쪽 이름으로만 매칭
+  const baseName = memberName.split(/[\(（]/)[0].trim();
+  const all = getAllMembers();
+
+  // 정확히 일치하는 회원 찾기 (공백 제거 후 비교)
+  const target = all.find(m => {
+    const mn = m.name.replace(/\s/g,'');
+    const bn = baseName.replace(/\s/g,'');
+    return mn === bn || mn.startsWith(bn) || bn.startsWith(mn);
+  });
+  if(!target) return false;
+
+  const memberId = target._id || target.name;
+  const custom   = loadCustomMembers();
+  const isBase   = MEMBERS.some(m => m.name === memberId || m.name === target.name);
+
+  // 기존 months 가져오기
+  const existIdx  = custom.findIndex(m => m._id === memberId);
+  const prevData  = existIdx >= 0 ? custom[existIdx]
+                  : isBase ? (MEMBERS.find(m => m.name === (target._id||target.name)) || {})
+                  : {};
+  const prevMonths = Array.isArray(prevData.months) ? [...prevData.months] : [];
+
+  // 새 달 추가 (중복 없이 병합)
+  const merged = [...new Set([...prevMonths, ...newMonths])].sort((a,b)=>parseInt(a)-parseInt(b));
+
+  const saved = Object.assign({}, target, { _id: memberId, months: merged });
+  if(existIdx >= 0) custom[existIdx] = saved;
+  else              custom.push(saved);
+  saveCustomMembers(custom);
+  return true;
 }
 
 function applyCsvTransactions() {
@@ -2945,19 +3121,41 @@ function applyCsvTransactions() {
     id: 'csv_' + now + '_' + i,
     date: r.date,
     month: String(parseInt(r.date.slice(5,7))),
-    bank: r.account,       // account → bank (노션 데이터와 통일)
-    cat: r.category,       // category → cat (노션 데이터와 통일)
+    bank: r.account,
+    cat: r.category,
     type: r.txType,
     amount: r.amount,
-    name: r.item,          // item → name (노션 데이터와 통일)
+    name: r.item,
     memo: r.memo || '',
     source: 'csv',
   }));
   saveTx([...existing, ...toAdd]);
-  showToast(`✅ ${toAdd.length}건 반영 완료!`);
+
+  // ── 회비 입금 항목: 메모에서 납입월 파싱 → 회원 자동 반영 ──
+  let autoApplied = 0;
+  if(csvBank === '회비') {
+    newItems.forEach(r => {
+      if(r.txType !== 'income') return;
+      const memoText = (r.memo || '') + ' ' + (r.item || '');
+      const parsedMonths = parseMonthsFromMemo(memoText);
+      if(!parsedMonths.length) return;
+
+      // item(내용)에서 회원 이름 추출: 첫 번째 단어 or 전체
+      const rawName = (r.item || '').trim();
+      const ok = applyMonthsToMember(rawName, parsedMonths);
+      if(ok) autoApplied++;
+    });
+  }
+
+  const msg = autoApplied > 0
+    ? `✅ ${toAdd.length}건 반영 완료! (납입월 ${autoApplied}명 자동 업데이트)`
+    : `✅ ${toAdd.length}건 반영 완료!`;
+  showToast(msg);
   csvParsed = [];
   document.getElementById('csvResultCard').style.display = 'none';
   renderHome();
+  renderMembers();
+  renderAssoc();
 }
 
 // ══════════════════════════════════════════
