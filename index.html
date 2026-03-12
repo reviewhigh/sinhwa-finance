@@ -1498,17 +1498,12 @@ async function syncFromSupabase(silent) {
     const localTxs = loadTx();
     if(txs && txs.length > 0) {
       if(txs.length >= localTxs.length) {
-        // Supabase가 같거나 더 많으면 → Supabase 기준으로 로컬 업데이트
         localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
       } else {
-        // 로컬이 더 많으면 → 로컬 데이터를 Supabase에 올리기
-        console.log('[SB] 로컬 데이터가 더 많음, 역방향 동기화 시작');
         _syncTxToSB(localTxs).catch(e => console.warn('[SB] 역방향 동기화 실패:', e));
       }
     } else {
-      // Supabase가 비어있으면 → 로컬 데이터를 Supabase에 올리기 (로컬 덮어쓰기 안 함!)
       if(localTxs.length > 0) {
-        console.log('[SB] Supabase 비어있음, 로컬 데이터 업로드 시작');
         _syncTxToSB(localTxs).catch(e => console.warn('[SB] 초기 업로드 실패:', e));
       }
     }
@@ -1560,6 +1555,14 @@ async function syncFromSupabase(silent) {
     console.warn('[SB] 동기화 실패 (오프라인?):', e);
     setSyncStatus('error');
     _isSyncing = false;
+    // 실패해도 로컬 데이터로 화면은 반드시 표시
+    renderHome();
+    const activeId = document.querySelector('.section.active')?.id;
+    if(activeId === 'sec-report')  renderReport(reportBank);
+    if(activeId === 'sec-members') renderMembers();
+    if(activeId === 'sec-income')  renderIncomeTx();
+    if(activeId === 'sec-expense') renderExpenseTx();
+    if(activeId === 'sec-assoc')   renderAssoc();
     return false;
   }
 }
@@ -3823,4 +3826,34 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
 
-  updateTabVisibili
+  updateTabVisibility();
+  initNotionData();
+  renderHome(); // 로컬 캐시로 일단 표시
+
+  // ── 최초 Supabase 로드 (로딩 오버레이 표시) ──
+  const overlay = document.getElementById('loadingOverlay');
+  const hideOverlay = () => {
+    if(!overlay) return;
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.4s';
+    setTimeout(() => { overlay.style.display = 'none'; }, 420);
+  };
+  if(overlay) {
+    overlay.style.display = 'flex';
+    try {
+      await syncFromSupabase();
+    } catch(e) {
+      // 동기화 실패해도 오버레이는 반드시 제거
+    } finally {
+      hideOverlay();
+    }
+  } else {
+    await syncFromSupabase();
+  }
+
+  // ── 30초마다 자동 동기화 시작 ──
+  startAutoSync();
+});
+</script>
+</body>
+</html>
