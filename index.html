@@ -1429,7 +1429,10 @@ async function sbUpsert(table, data) {
   if(!r.ok) throw new Error(await r.text());
 }
 async function sbDelete(table, filter) {
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: SB_HEADERS });
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
+    method: 'DELETE',
+    headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' }
+  });
   if(!r.ok) throw new Error(await r.text());
 }
 
@@ -1442,10 +1445,35 @@ const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'si
 function loadTx() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX) || '[]'); } catch { return []; }
 }
-// 추가/수정: 로컬 저장 + SB upsert (변경된 항목만)
-function saveTx(arr) {
+// TX 로컬 저장만 (SB 동기화 없음 — 개별 함수 사용)
+function _saveTxLocal(arr) {
   localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
-  _syncTxToSB(arr).catch(e => console.warn('[SB] TX 동기화 실패:', e));
+}
+// 새 항목 1개 추가: 로컬 + SB upsert 1건
+function addTxOne(tx) {
+  const arr = loadTx();
+  arr.unshift(tx);
+  _saveTxLocal(arr);
+  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
+}
+// 항목 수정: 로컬 + SB upsert 1건
+function updateTxOne(tx) {
+  const arr = loadTx();
+  const idx = arr.findIndex(t => String(t.id) === String(tx.id));
+  if(idx >= 0) arr[idx] = tx; else arr.unshift(tx);
+  _saveTxLocal(arr);
+  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 수정 실패:', e));
+}
+// 다수 항목 한꺼번에 저장 (CSV/노션 import 전용)
+function saveTxBulk(arr) {
+  _saveTxLocal(arr);
+  if(arr.length > 0) sbUpsert('transactions', arr).catch(e => console.warn('[SB] TX bulk 실패:', e));
+}
+// 하위호환 — 기존 saveTx 호출부 중 수정/추가 혼재 케이스용
+// 단, 전체 배열 upsert는 하지 않고 로컬만 저장
+// (삭제된 항목이 다시 SB에 올라가는 문제 원천 차단)
+function saveTx(arr) {
+  _saveTxLocal(arr);
 }
 async function _syncTxToSB(arr) {
   if(!arr.length) return;
@@ -1505,12 +1533,13 @@ async function syncFromSupabase(silent) {
       const sbIdSet = new Set(sbTxs.map(t => String(t.id)));
       const onlyLocal = localTxs.filter(t => !sbIdSet.has(String(t.id)));
       if(onlyLocal.length > 0) {
-        await _syncTxToSB(onlyLocal).catch(e => console.warn('[SB] TX 재업로드 실패:', e));
-        // 재업로드 후 최신 SB 데이터로 다시 가져옴
+        // 로컬에만 있는 항목 → SB에 추가 (upsert)
+        await sbUpsert('transactions', onlyLocal).catch(e => console.warn('[SB] TX 재업로드 실패:', e));
+        // 재업로드 후 SB 재조회 → 로컬 갱신
         const refreshed = await sbGet('transactions', 'order=date.desc&limit=2000').catch(() => null);
         localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(refreshed || [...sbTxs, ...onlyLocal]));
       } else {
-        // SB와 로컬 완전 일치 or SB가 최신 → SB로 덮어쓰기
+        // SB = 진실 → 그대로 로컬 덮어쓰기
         localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(sbTxs));
       }
     } else if(localTxs.length > 0) {
@@ -1802,7 +1831,8 @@ function initNotionData() {
   if(toAdd.length > 0) {
     const merged = [...toAdd, ...existing];
     merged.sort((a,b) => new Date(b.date) - new Date(a.date));
-    saveTx(merged);
+    _saveTxLocal(merged);
+    if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] Notion TX bulk 실패:', e));
 
     // 잔액 재계산
     const bal = { 회비: 0, 레슨비: 0, 셔틀콕: 0 };
@@ -1971,7 +2001,8 @@ function recordFromKakao(name, amount, bank, cat) {
   };
   const txs = loadTx();
   txs.unshift(tx);
-  saveTx(txs);
+  _saveTxLocal(txs);
+  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
 
   // 잔액 업데이트
   const bal = loadBalance();
@@ -2006,7 +2037,8 @@ function addTransaction(type) {
   };
   const txs = loadTx();
   txs.unshift(tx);
-  saveTx(txs);
+  _saveTxLocal(txs);
+  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
 
   // 잔액
   const bal = loadBalance();
@@ -2714,7 +2746,10 @@ ${JSON.stringify(toSyncData, null, 2)}`;
     logBox.innerHTML = `<span style="color:#4caf50">✅ ${toSyncData.length}건 복사 완료!</span><br><span style="color:#aaa;font-size:11px">Claude 채팅창에 붙여넣기(Ctrl+V)하면 노션에 자동 기록됩니다.</span>`;
     // 동기화된 것으로 표시
     const ids = new Set(toSync.map(t=>t.id));
-    saveTx(allTxs.map(t => ids.has(t.id) ? {...t, source:'notion'} : t));
+    const taggedArr = allTxs.map(t => ids.has(t.id) ? {...t, source:'notion'} : t);
+    _saveTxLocal(taggedArr);
+    const taggedOnly = taggedArr.filter(t => ids.has(t.id));
+    if(taggedOnly.length > 0) sbUpsert('transactions', taggedOnly).catch(e => console.warn('[SB] 노션태깅 실패:', e));
     document.getElementById('notionSyncBtnText').textContent = `✅ ${toSyncData.length}건 복사됨`;
     setTimeout(() => {
       document.getElementById('notionSyncBtnText').textContent = '거래내역 복사';
@@ -3554,7 +3589,8 @@ function saveTxEdit() {
     month: String(parseInt(date.slice(5,7))),
   };
   allTxs[idx] = updated;
-  saveTx(allTxs);
+  _saveTxLocal(allTxs);
+  sbUpsert('transactions', [updated]).catch(e => console.warn('[SB] TX 수정 실패:', e));
 
   // 잔액 재계산
   recalcBalance();
@@ -3857,7 +3893,9 @@ function applyCsvTransactions() {
     memo: r.memo || '',
     source: 'csv',
   }));
-  saveTx([...existing, ...toAdd]);
+  const merged = [...existing, ...toAdd];
+  _saveTxLocal(merged);
+  if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] CSV TX bulk 실패:', e));
 
   // ── 회비 입금 항목: 메모에서 납입월 파싱 → 회원 자동 반영 ──
   let autoApplied = 0;
