@@ -299,6 +299,9 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(1.3); }
   }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
   .deposit-alert-title { font-size: 14px; font-weight: 600; color: var(--green-glow); }
   .deposit-alert-sub { font-size: 12px; color: var(--text-muted); margin-left: auto; }
 
@@ -602,6 +605,13 @@
 </head>
 <body>
 
+<!-- 로딩 오버레이 (첫 접속 시 Supabase 로드 중 표시) -->
+<div id="loadingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+  <div style="font-size:36px">🏸</div>
+  <div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green-bright);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+  <div style="font-size:13px;color:var(--text-muted);font-weight:500;">최신 데이터 불러오는 중...</div>
+</div>
+
 <!-- 헤더 -->
 <header>
   <div class="logo">
@@ -669,7 +679,10 @@
         <div class="section-title">재무 현황</div>
         <div class="section-sub" id="homeSubtitle"></div>
       </div>
-      <button onclick="syncFromSupabase()" style="background:var(--green);color:var(--text);border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600;">☁️ 동기화</button>
+      <div id="syncIndicator" style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-dim);">
+        <div id="syncDot" style="width:6px;height:6px;border-radius:50%;background:var(--text-dim);flex-shrink:0;transition:background 0.3s;"></div>
+        <span id="syncText"></span>
+      </div>
     </div>
 
     <!-- 잔액 카드 -->
@@ -1449,55 +1462,109 @@ function saveBalance(obj) {
     .catch(e => console.warn('[SB] Balance 동기화 실패:', e));
 }
 
-// ── Supabase → 로컬 전체 동기화 ───────────
-async function syncFromSupabase() {
-  try {
-    showToast('☁️ 데이터 불러오는 중...', 2000);
+// ── 동기화 상태 UI ─────────────────────────
+var _isSyncing = false;
+var _autoSyncTimer = null;
 
+function setSyncStatus(state) {
+  // state: 'syncing' | 'ok' | 'error' | 'idle'
+  const dot  = document.getElementById('syncDot');
+  const text = document.getElementById('syncText');
+  if(!dot || !text) return;
+  const styles = {
+    syncing: { bg: '#f4a261', label: '동기화 중...' },
+    ok:      { bg: '#52b788', label: '✓ 동기화됨'  },
+    error:   { bg: '#e63946', label: '오프라인'     },
+    idle:    { bg: 'var(--text-dim)', label: ''     },
+  };
+  const s = styles[state] || styles.idle;
+  dot.style.background = s.bg;
+  text.textContent = s.label;
+  if(state === 'syncing') dot.style.animation = 'pulse 1s infinite';
+  else dot.style.animation = '';
+  // ok 상태는 3초 후 idle로 복귀
+  if(state === 'ok') setTimeout(() => setSyncStatus('idle'), 3000);
+}
+
+// ── Supabase → 로컬 전체 동기화 ───────────
+// 이제 자동으로 호출됨 (버튼 없음)
+async function syncFromSupabase(silent) {
+  if(_isSyncing) return false;
+  _isSyncing = true;
+  setSyncStatus('syncing');
+  try {
     // 거래내역
     const txs = await sbGet('transactions', 'order=date.desc&limit=2000');
-    if(txs.length > 0) {
+    if(txs && txs.length > 0) {
       localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
     }
 
     // 잔액
     const balRows = await sbGet('balance', 'id=eq.main');
-    if(balRows.length > 0) {
+    if(balRows && balRows.length > 0) {
       const b = balRows[0];
       const balObj = { '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 };
       localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(balObj));
     }
 
-    // 회원 커스텀 데이터
-    const memRows = await sbGet('members', '');
-    if(memRows.length > 0) {
-      const mems = memRows.map(r => r.data);
-      localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
+    // 회원 커스텀 데이터 (__tx_order__ 제외)
+    const memRows = await sbGet('members', 'id=not.like.__tx_order__');
+    if(memRows && memRows.length > 0) {
+      const mems = memRows.map(r => r.data).filter(Boolean);
+      if(mems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
     }
 
     // 셔틀콕 예약
     const cokRows = await sbGet('cok_reservations', '');
-    if(cokRows.length > 0) {
-      const coks = cokRows.map(r => r.data);
+    if(cokRows && cokRows.length > 0) {
+      const coks = cokRows.map(r => r.data).filter(Boolean);
       localStorage.setItem('sinwha_cok_reservations', JSON.stringify(coks));
     }
 
     // TX 순서
-    const orderRows = await sbGet('members', 'id=eq.__tx_order__');
-    if(orderRows.length > 0 && orderRows[0].data) {
-      localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(orderRows[0].data));
-    }
+    try {
+      const orderRows = await sbGet('members', 'id=eq.__tx_order__');
+      if(orderRows && orderRows.length > 0 && orderRows[0].data) {
+        localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(orderRows[0].data));
+      }
+    } catch(e) { /* TX 순서는 없어도 됨 */ }
 
-    showToast('✅ 최신 데이터 반영 완료!', 2000);
+    setSyncStatus('ok');
+    _isSyncing = false;
+
+    // 현재 화면 조용히 리렌더
     renderHome();
-    renderIncomeTx();
-    renderExpenseTx();
-    renderMembers();
+    const activeId = document.querySelector('.section.active')?.id;
+    if(activeId === 'sec-report')  renderReport(reportBank);
+    if(activeId === 'sec-members') renderMembers();
+    if(activeId === 'sec-income')  renderIncomeTx();
+    if(activeId === 'sec-expense') renderExpenseTx();
+    if(activeId === 'sec-assoc')   renderAssoc();
+
+    return true;
   } catch(e) {
-    console.error('[SB] 동기화 실패:', e);
-    showToast('⚠️ 동기화 실패 - 로컬 데이터로 표시', 2500);
+    console.warn('[SB] 동기화 실패 (오프라인?):', e);
+    setSyncStatus('error');
+    _isSyncing = false;
+    return false;
   }
 }
+
+// ── 30초마다 자동 백그라운드 동기화 ────────
+function startAutoSync() {
+  if(_autoSyncTimer) clearInterval(_autoSyncTimer);
+  _autoSyncTimer = setInterval(() => {
+    if(!_isSyncing) syncFromSupabase(true);
+  }, 30000);
+}
+
+// ── 탭 복귀 시 즉시 동기화 ─────────────────
+// (다른 기기에서 입력 후 이 기기로 돌아오면 바로 반영)
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && !_isSyncing) {
+    syncFromSupabase(true);
+  }
+});
 
 // ══════════════════════════════════════════
 //  회원 데이터 (노션 기반)
@@ -3729,7 +3796,7 @@ function applyCsvTransactions() {
 // ══════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
   // 오늘 날짜
   const now = new Date();
   const wd = ['일','월','화','수','목','금','토'][now.getDay()];
@@ -3742,12 +3809,26 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
 
-  updateTabVisibility(); // 회원 모드로 시작 (관리자 탭 숨김)
+  updateTabVisibility();
   initNotionData();
-  renderHome(); // 로컬 데이터 먼저 표시
+  renderHome(); // 로컬 캐시로 일단 표시
 
-  // Supabase에서 최신 데이터 자동 로드
-  syncFromSupabase();
+  // ── 최초 Supabase 로드 (로딩 오버레이 표시) ──
+  const overlay = document.getElementById('loadingOverlay');
+  if(overlay) {
+    // 첫 접속 시 로딩 화면 표시
+    overlay.style.display = 'flex';
+    await syncFromSupabase();
+    // 동기화 끝나면 오버레이 서서히 제거
+    overlay.style.opacity = '0';
+    overlay.style.transition = 'opacity 0.4s';
+    setTimeout(() => { overlay.style.display = 'none'; }, 420);
+  } else {
+    await syncFromSupabase();
+  }
+
+  // ── 30초마다 자동 동기화 시작 ──
+  startAutoSync();
 });
 </script>
 </body>
