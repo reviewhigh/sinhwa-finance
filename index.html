@@ -1443,11 +1443,14 @@ function loadTx() {
 }
 function saveTx(arr) {
   localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
-  // Supabase 동기화 (비동기, 에러무시)
   _syncTxToSB(arr).catch(e => console.warn('[SB] TX 동기화 실패:', e));
 }
+// 삭제 시 로컬만 저장 (SB는 sbDelete로 별도 처리)
+function saveTxLocal(arr) {
+  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
+}
 async function _syncTxToSB(arr) {
-  if(!arr.length) return;
+  if(!arr.length) return; // TX는 개별 삭제(sbDelete)로 처리
   await sbUpsert('transactions', arr);
 }
 
@@ -1493,44 +1496,72 @@ async function syncFromSupabase(silent) {
   _isSyncing = true;
   setSyncStatus('syncing');
   try {
-    // 거래내역 (버그 수정: Supabase 비어있을 때 로컬 데이터 보호)
-    const txs = await sbGet('transactions', 'order=date.desc&limit=2000');
+    // ── 거래내역: ID 집합 기반 병합 (개수 비교 X → 정확한 양방향) ──
+    const sbTxs   = await sbGet('transactions', 'order=date.desc&limit=2000');
     const localTxs = loadTx();
-    if(txs && txs.length > 0) {
-      if(txs.length >= localTxs.length) {
-        localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
-      } else {
-        _syncTxToSB(localTxs).catch(e => console.warn('[SB] 역방향 동기화 실패:', e));
+    if(sbTxs && sbTxs.length > 0) {
+      // SB ID 집합 & 로컬 ID 집합 비교
+      const sbIdSet    = new Set(sbTxs.map(t => String(t.id)));
+      const localIdSet = new Set(localTxs.map(t => String(t.id)));
+      // 로컬에만 있는 항목 → SB에 업로드
+      const onlyLocal = localTxs.filter(t => !sbIdSet.has(String(t.id)));
+      if(onlyLocal.length > 0) {
+        _syncTxToSB(onlyLocal).catch(e => console.warn('[SB] TX 로컬→SB 실패:', e));
       }
-    } else {
-      if(localTxs.length > 0) {
-        _syncTxToSB(localTxs).catch(e => console.warn('[SB] 초기 업로드 실패:', e));
-      }
+      // SB에만 있는 항목 + 공통 항목 = 최종 로컬
+      const merged = [
+        ...sbTxs,
+        ...onlyLocal
+      ];
+      // 중복 제거 후 날짜 내림차순
+      const seen = new Set();
+      const deduped = merged.filter(t => { const k=String(t.id); if(seen.has(k)) return false; seen.add(k); return true; });
+      deduped.sort((a,b) => (b.date||'').localeCompare(a.date||''));
+      localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(deduped));
+      // TX 병합 후 잔액 재계산 → SB에도 반영 (로컬→SB 업로드가 있었을 경우 잔액 불일치 방지)
+      if(onlyLocal.length > 0) recalcBalance();
+    } else if(localTxs.length > 0) {
+      // SB 비어있음 → 로컬 전체 업로드
+      _syncTxToSB(localTxs).catch(e => console.warn('[SB] TX 초기업로드 실패:', e));
     }
 
-    // 잔액
+    // ── 잔액: SB 우선, 없으면 로컬 기준 재계산 ──────
     const balRows = await sbGet('balance', 'id=eq.main');
     if(balRows && balRows.length > 0) {
       const b = balRows[0];
-      const balObj = { '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 };
-      localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(balObj));
+      localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(
+        { '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 }
+      ));
+    } else {
+      recalcBalance();
     }
 
-    // 회원 커스텀 데이터 (__tx_order__ 제외)
-    const memRows = await sbGet('members', 'id=not.like.__tx_order__');
+    // ── 회원 커스텀 데이터: SB 항상 우선 ────────────
+    const memRows  = await sbGet('members', 'id=neq.__tx_order__');
+    const localMems = (() => { try { return JSON.parse(localStorage.getItem('sinwha_members_v2')||'[]'); } catch { return []; } })();
     if(memRows && memRows.length > 0) {
-      const mems = memRows.map(r => r.data).filter(Boolean);
-      if(mems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
+      const sbMems = memRows.map(r => r.data).filter(Boolean);
+      if(sbMems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(sbMems));
+    } else if(localMems.length > 0) {
+      _syncMembersToSB(localMems).catch(e => console.warn('[SB] Members 초기업로드 실패:', e));
     }
 
-    // 셔틀콕 예약
-    const cokRows = await sbGet('cok_reservations', '');
+    // ── 셔틀콕 예약: 마커 기반 양방향 ───────────────
+    const cokRows  = await sbGet('cok_reservations', '');
+    const localCoks = loadCokReservations();
     if(cokRows && cokRows.length > 0) {
-      const coks = cokRows.map(r => r.data).filter(Boolean);
-      localStorage.setItem('sinwha_cok_reservations', JSON.stringify(coks));
+      const hasCleared = cokRows.some(r => r.id === '__cok_cleared__');
+      if(hasCleared) {
+        localStorage.setItem('sinwha_cok_reservations', JSON.stringify([]));
+      } else {
+        const sbCoks = cokRows.map(r => r.data).filter(Boolean);
+        if(sbCoks.length > 0) localStorage.setItem('sinwha_cok_reservations', JSON.stringify(sbCoks));
+      }
+    } else if(localCoks.length > 0) {
+      _syncCokToSB(localCoks).catch(e => console.warn('[SB] Cok 초기업로드 실패:', e));
     }
 
-    // TX 순서
+    // ── TX 순서: SB 우선 ─────────────────────────────
     try {
       const orderRows = await sbGet('members', 'id=eq.__tx_order__');
       if(orderRows && orderRows.length > 0 && orderRows[0].data) {
@@ -1541,7 +1572,7 @@ async function syncFromSupabase(silent) {
     setSyncStatus('ok');
     _isSyncing = false;
 
-    // 현재 화면 조용히 리렌더
+    // 현재 화면 리렌더
     renderHome();
     const activeId = document.querySelector('.section.active')?.id;
     if(activeId === 'sec-report')  renderReport(reportBank);
@@ -1549,13 +1580,14 @@ async function syncFromSupabase(silent) {
     if(activeId === 'sec-income')  renderIncomeTx();
     if(activeId === 'sec-expense') renderExpenseTx();
     if(activeId === 'sec-assoc')   renderAssoc();
-
+    if(activeId === 'sec-cok')     renderCokTab();
     return true;
+
   } catch(e) {
     console.warn('[SB] 동기화 실패 (오프라인?):', e);
     setSyncStatus('error');
     _isSyncing = false;
-    // 실패해도 로컬 데이터로 화면은 반드시 표시
+    // 실패해도 로컬 데이터로 화면 표시
     renderHome();
     const activeId2 = document.querySelector('.section.active')?.id;
     if(activeId2 === 'sec-report')  renderReport(reportBank);
@@ -1563,6 +1595,7 @@ async function syncFromSupabase(silent) {
     if(activeId2 === 'sec-income')  renderIncomeTx();
     if(activeId2 === 'sec-expense') renderExpenseTx();
     if(activeId2 === 'sec-assoc')   renderAssoc();
+    if(activeId2 === 'sec-cok')     renderCokTab();
     return false;
   }
 }
@@ -1715,7 +1748,7 @@ const NOTION_TRANSACTIONS = [
 const CURRENT_MONTH = String(new Date().getMonth() + 1);
 const CURRENT_YEAR  = String(new Date().getFullYear());
 
-// date 필드("2026-03-12") 또는 month 필드로 이번달 여부 판단
+// date("2026-03-12") 또는 month 필드로 이번달 여부 판단
 function isThisMonth(t) {
   if(t.date) {
     const d = new Date(t.date);
@@ -2245,6 +2278,9 @@ function loadTxOrder() {
 }
 function saveTxOrder(arr) {
   localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(arr));
+  // SB members 테이블에 특수 키로 저장
+  sbUpsert('members', [{ id: '__tx_order__', data: arr }])
+    .catch(e => console.warn('[SB] TX순서 동기화 실패:', e));
 }
 
 // 저장된 순서 적용 (없으면 날짜순 기본)
@@ -2278,6 +2314,7 @@ function moveTxOrder(txId, dir) {
 // 순서 초기화 (날짜순으로 되돌리기)
 function resetTxOrder() {
   localStorage.removeItem(STORAGE_KEYS.TX_ORDER);
+  sbDelete('members', 'id=eq.__tx_order__').catch(e => console.warn('[SB] TX순서 삭제 실패:', e));
   showToast('순서가 날짜순으로 초기화됐어요');
   renderReport(document.querySelector('.report-bank-tab.active')?.dataset.bank || '전체');
 }
@@ -2783,13 +2820,18 @@ function loadCustomMembers() {
 }
 function saveCustomMembers(arr) {
   localStorage.setItem(MEMBERS_KEY, JSON.stringify(arr));
-  // Supabase 동기화
+  // Supabase 동기화 (_deleted 항목은 SB에서 실제 삭제 포함)
   _syncMembersToSB(arr).catch(e => console.warn('[SB] Members 동기화 실패:', e));
 }
 async function _syncMembersToSB(arr) {
-  // 기존 전체 삭제 후 재삽입 (단순전략)
-  // members 테이블: id=회원_id, data=JSON
-  const rows = arr.map(m => ({ id: String(m._id), data: m }));
+  // _deleted:true 항목 → SB에서 실제 삭제
+  const toDelete = arr.filter(m => m._deleted === true);
+  const toUpsert = arr.filter(m => !m._deleted);
+
+  for(const m of toDelete) {
+    await sbDelete('members', `id=eq.${encodeURIComponent(String(m._id))}`).catch(() => {});
+  }
+  const rows = toUpsert.map(m => ({ id: String(m._id), data: m }));
   if(rows.length > 0) await sbUpsert('members', rows);
 }
 
@@ -3542,8 +3584,7 @@ function saveTxEdit() {
 function deleteTx(id) {
   if(!confirm('이 항목을 삭제할까요?')) return;
   const allTxs = loadTx().filter(t => String(t.id) !== String(id));
-  saveTx(allTxs);
-  // Supabase에서도 삭제
+  saveTxLocal(allTxs); // 로컬만 저장 (saveTx 시 삭제된 항목이 SB에 재업로드되는 문제 방지)
   sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('[SB] TX 삭제 실패:', e));
   recalcBalance();
   showToast('🗑️ 삭제 완료');
@@ -3576,8 +3617,15 @@ function saveCokReservations_store(arr) {
   _syncCokToSB(arr).catch(e => console.warn('[SB] Cok 동기화 실패:', e));
 }
 async function _syncCokToSB(arr) {
-  const rows = arr.map(c => ({ id: String(c.id), data: c }));
-  if(rows.length > 0) await sbUpsert('cok_reservations', rows);
+  if(arr.length === 0) {
+    // 의도적 전체삭제 → 마커 저장 (다른 기기에서 삭제 인식)
+    await sbUpsert('cok_reservations', [{ id: '__cok_cleared__', data: { cleared_at: new Date().toISOString() } }]);
+  } else {
+    // 데이터 있음 → 마커 제거 후 업서트
+    try { await sbDelete('cok_reservations', 'id=eq.__cok_cleared__'); } catch(e) {}
+    const rows = arr.map(c => ({ id: String(c.id), data: c }));
+    await sbUpsert('cok_reservations', rows);
+  }
 }
 
 // 카톡 텍스트 파싱: "김진상 2통\n지성근 2통\n45통" → [{name, qty}]
@@ -3675,6 +3723,9 @@ function clearAllCokReservations() {
 function deleteCokReservation(id) {
   const list = loadCokReservations().filter(r => r.id !== id);
   saveCokReservations_store(list);
+  // SB에서도 해당 row 삭제 (없으면 무시)
+  sbDelete('cok_reservations', `id=eq.${encodeURIComponent(String(id))}`)
+    .catch(e => console.warn('[SB] Cok 개별삭제 실패:', e));
   renderCokTab();
 }
 
@@ -3850,13 +3901,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   };
   if(overlay) {
     overlay.style.display = 'flex';
-    try {
-      await syncFromSupabase();
-    } catch(e) {
-      // 동기화 실패해도 오버레이는 반드시 제거
-    } finally {
-      hideOverlay();
-    }
+    try { await syncFromSupabase(); } catch(e) { /* 오프라인이어도 계속 */ } finally { hideOverlay(); }
   } else {
     await syncFromSupabase();
   }
