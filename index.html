@@ -1436,35 +1436,19 @@ async function sbDelete(table, filter) {
 // ══════════════════════════════════════════
 //  데이터 스토어 (Supabase + 로컬 캐시)
 // ══════════════════════════════════════════
-const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'sinwha_tx_order', DELETED_TX: 'sinwha_deleted_tx' };
+const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'sinwha_tx_order' };
 
 // ── TX (거래내역) ──────────────────────────
 function loadTx() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX) || '[]'); } catch { return []; }
 }
+// 추가/수정: 로컬 저장 + SB upsert (변경된 항목만)
 function saveTx(arr) {
   localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
   _syncTxToSB(arr).catch(e => console.warn('[SB] TX 동기화 실패:', e));
 }
-// 삭제 시 로컬만 저장 (SB는 sbDelete로 별도 처리)
-function saveTxLocal(arr) {
-  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
-}
-// 삭제된 TX ID 목록 관리 (동기화 시 SB에서도 확실히 제거하기 위해)
-function loadDeletedTxIds() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.DELETED_TX) || '[]'); } catch { return []; }
-}
-function addDeletedTxId(id) {
-  const ids = loadDeletedTxIds();
-  if(!ids.includes(String(id))) {
-    ids.push(String(id));
-    // 최대 500개만 유지 (오래된 것부터 제거)
-    if(ids.length > 500) ids.splice(0, ids.length - 500);
-    localStorage.setItem(STORAGE_KEYS.DELETED_TX, JSON.stringify(ids));
-  }
-}
 async function _syncTxToSB(arr) {
-  if(!arr.length) return; // TX는 개별 삭제(sbDelete)로 처리
+  if(!arr.length) return;
   await sbUpsert('transactions', arr);
 }
 
@@ -1510,43 +1494,31 @@ async function syncFromSupabase(silent) {
   _isSyncing = true;
   setSyncStatus('syncing');
   try {
-    // ── 거래내역: 삭제 목록 우선 적용 후 ID 집합 병합 ──
-    const deletedIds = new Set(loadDeletedTxIds().map(String));
-    const sbTxs   = await sbGet('transactions', 'order=date.desc&limit=2000');
+    // ── 거래내역: SB = 단일 진실, 로컬 = 캐시 ──────────
+    // 설계 원칙: 동기화 시 SB 데이터를 그대로 로컬에 덮어씀
+    // 로컬에만 있는 항목(SB 업로드 실패 잔재)만 예외적으로 SB에 올려줌
+    const sbTxs  = await sbGet('transactions', 'order=date.desc&limit=2000');
     const localTxs = loadTx();
 
-    // SB에서 받아온 항목 중 삭제된 ID가 있으면 SB에서도 즉시 제거
     if(sbTxs && sbTxs.length > 0) {
-      const sbDeleteTargets = sbTxs.filter(t => deletedIds.has(String(t.id)));
-      for(const t of sbDeleteTargets) {
-        sbDelete('transactions', `id=eq.${encodeURIComponent(String(t.id))}`)
-          .catch(e => console.warn('[SB] 삭제 재시도 실패:', e));
-      }
-
-      // 삭제된 ID 제외한 SB 항목
-      const sbValid = sbTxs.filter(t => !deletedIds.has(String(t.id)));
-      const sbIdSet = new Set(sbValid.map(t => String(t.id)));
-
-      // 로컬에만 있는 항목 중 삭제되지 않은 것 → SB에 업로드
-      const onlyLocal = localTxs.filter(t => !sbIdSet.has(String(t.id)) && !deletedIds.has(String(t.id)));
+      // SB에 없고 로컬에만 있는 항목 → SB 업로드 실패한 것 → 재업로드
+      const sbIdSet = new Set(sbTxs.map(t => String(t.id)));
+      const onlyLocal = localTxs.filter(t => !sbIdSet.has(String(t.id)));
       if(onlyLocal.length > 0) {
-        _syncTxToSB(onlyLocal).catch(e => console.warn('[SB] TX 로컬→SB 실패:', e));
+        await _syncTxToSB(onlyLocal).catch(e => console.warn('[SB] TX 재업로드 실패:', e));
+        // 재업로드 후 최신 SB 데이터로 다시 가져옴
+        const refreshed = await sbGet('transactions', 'order=date.desc&limit=2000').catch(() => null);
+        localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(refreshed || [...sbTxs, ...onlyLocal]));
+      } else {
+        // SB와 로컬 완전 일치 or SB가 최신 → SB로 덮어쓰기
+        localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(sbTxs));
       }
-
-      // 최종 병합: SB 유효 항목 + 로컬 only 항목
-      const merged = [...sbValid, ...onlyLocal];
-      const seen = new Set();
-      const deduped = merged.filter(t => { const k=String(t.id); if(seen.has(k)) return false; seen.add(k); return true; });
-      deduped.sort((a,b) => (b.date||'').localeCompare(a.date||''));
-      localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(deduped));
-
     } else if(localTxs.length > 0) {
-      // SB 비어있음 → 로컬 중 삭제되지 않은 항목만 업로드
-      const validLocal = localTxs.filter(t => !deletedIds.has(String(t.id)));
-      if(validLocal.length > 0) _syncTxToSB(validLocal).catch(e => console.warn('[SB] TX 초기업로드 실패:', e));
+      // SB 완전 비어있음 → 로컬 전체 업로드 (초기 마이그레이션)
+      await _syncTxToSB(localTxs).catch(e => console.warn('[SB] TX 초기업로드 실패:', e));
     }
 
-    // ── 잔액: TX 목록 기준 항상 재계산 ──────────────
+    // ── 잔액: TX 기준 항상 재계산 ────────────────────
     recalcBalance();
 
     // ── 회원 커스텀 데이터: SB 항상 우선 ────────────
@@ -3596,20 +3568,21 @@ function saveTxEdit() {
 
 async function deleteTx(id) {
   if(!confirm('이 항목을 삭제할까요?')) return;
+  // 1) 로컬에서 즉시 제거 + 잔액 반영
   const allTxs = loadTx().filter(t => String(t.id) !== String(id));
-  saveTxLocal(allTxs);
-  addDeletedTxId(id); // 삭제 ID 로컬에 기록 → 동기화 시 SB에서도 확실히 제거
-  try {
-    await sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`);
-  } catch(e) {
-    console.warn('[SB] TX 삭제 실패 (오프라인?):', e);
-    // 실패해도 ID는 기록됨 → 다음 동기화 때 처리
-  }
+  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(allTxs));
   recalcBalance();
-  showToast('🗑️ 삭제 완료');
   renderIncomeTx();
   renderExpenseTx();
   renderHome();
+  showToast('🗑️ 삭제 완료');
+  // 2) SB에서도 삭제 (await — 완료 보장)
+  try {
+    await sbDelete('transactions', `id=eq.${encodeURIComponent(String(id))}`);
+  } catch(e) {
+    console.warn('[SB] TX SB삭제 실패:', e);
+    showToast('⚠️ 서버 삭제 실패. 다시 시도해주세요.');
+  }
 }
 
 function recalcBalance() {
