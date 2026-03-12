@@ -903,8 +903,9 @@
         style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
         placeholder="예시:
 김진상 2통
-지성근 2통
-45통"></textarea>
+지성근2통
+박지수 1
+이민호3"></textarea>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button onclick="parseCokKakao()"
           style="flex:1;background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
@@ -3628,23 +3629,24 @@ async function _syncCokToSB(arr) {
   }
 }
 
-// 카톡 텍스트 파싱: "김진상 2통\n지성근 2통\n45통" → [{name, qty}]
+// 카톡 텍스트 파싱
+// 지원 형식: "이름 2통" / "이름2통" / "이름 2" / "이름2" (띄어쓰기·통 선택)
 function parseCokText(text) {
   const lines = text.trim().split(/\n/);
   const results = [];
   lines.forEach(line => {
     line = line.trim();
     if(!line) return;
-    // "이름 N통" 패턴
-    const m = line.match(/^(.+?)\s+(\d+)\s*통$/);
+    // 패턴: 이름(한글/영문/공백포함) + 숫자 + 통(선택)
+    // 숫자만 있는 줄(잔여 합계)은 제외
+    if(/^\d+통?$/.test(line)) return;
+    const m = line.match(/^(.+?)\s*(\d+)\s*통?$/);
     if(m) {
       const name = m[1].trim();
       const qty  = parseInt(m[2]);
-      // 숫자만 있는 줄 (잔여 합계) 제외
-      if(/^\d+$/.test(name)) return;
+      if(!name || /^\d+$/.test(name) || qty < 1) return;
       results.push({ name, qty, amount: qty * COK_PRICE });
     }
-    // 숫자만 있는 줄 → 잔여 합계, 무시
   });
   return results;
 }
@@ -3681,30 +3683,52 @@ function parseCokKakao() {
   saveBtn._parsed = parsed;
 }
 
-function saveCokReservations() {
+async function saveCokReservations() {
   const btn = document.getElementById('cokSaveBtn');
   const parsed = btn._parsed;
   if(!parsed || !parsed.length) return;
 
-  const existing = loadCokReservations();
-  const now = Date.now();
-  const newItems = parsed.map((r, i) => ({
-    id: 'cok_' + now + '_' + i,
-    name: r.name,
-    qty: r.qty,
-    amount: r.amount,
-    matched: false,
-    savedAt: new Date().toLocaleDateString('ko-KR'),
-  }));
+  btn.disabled = true;
+  btn.textContent = '저장 중...';
 
-  saveCokReservations_store([...existing, ...newItems]);
-  showToast(`✅ ${newItems.length}건 예약 저장 완료!`);
+  try {
+    // SB 최신 목록 먼저 가져와서 병합 (동기화 안 된 상태에서도 기존 데이터 보존)
+    let existing = loadCokReservations();
+    try {
+      const sbRows = await sbGet('cok_reservations', '');
+      if(sbRows && sbRows.length > 0 && !sbRows.some(r => r.id === '__cok_cleared__')) {
+        const sbCoks = sbRows.map(r => r.data).filter(Boolean);
+        if(sbCoks.length > 0) {
+          // SB 항목과 로컬 항목 병합 (ID 기준 중복 제거, SB 우선)
+          const sbIds = new Set(sbCoks.map(c => c.id));
+          const localOnly = existing.filter(c => !sbIds.has(c.id));
+          existing = [...sbCoks, ...localOnly];
+          localStorage.setItem(COK_RESERVE_KEY, JSON.stringify(existing));
+        }
+      }
+    } catch(e) { /* 오프라인이면 로컬 기준으로 진행 */ }
 
-  // 입력창 초기화
-  document.getElementById('cokKakaoPaste').value = '';
-  document.getElementById('cokParsePreview').style.display = 'none';
-  btn.style.display = 'none';
-  renderCokTab();
+    const now = Date.now();
+    const newItems = parsed.map((r, i) => ({
+      id: 'cok_' + now + '_' + i,
+      name: r.name,
+      qty: r.qty,
+      amount: r.amount,
+      matched: false,
+      savedAt: new Date().toLocaleDateString('ko-KR'),
+    }));
+
+    saveCokReservations_store([...existing, ...newItems]);
+    showToast(`✅ ${newItems.length}건 예약 저장 완료!`);
+
+    // 입력창 초기화
+    document.getElementById('cokKakaoPaste').value = '';
+    document.getElementById('cokParsePreview').style.display = 'none';
+    btn.style.display = 'none';
+    renderCokTab();
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function clearCokInput() {
