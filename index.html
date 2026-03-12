@@ -1557,12 +1557,12 @@ async function syncFromSupabase(silent) {
     _isSyncing = false;
     // 실패해도 로컬 데이터로 화면은 반드시 표시
     renderHome();
-    const activeId = document.querySelector('.section.active')?.id;
-    if(activeId === 'sec-report')  renderReport(reportBank);
-    if(activeId === 'sec-members') renderMembers();
-    if(activeId === 'sec-income')  renderIncomeTx();
-    if(activeId === 'sec-expense') renderExpenseTx();
-    if(activeId === 'sec-assoc')   renderAssoc();
+    const activeId2 = document.querySelector('.section.active')?.id;
+    if(activeId2 === 'sec-report')  renderReport(reportBank);
+    if(activeId2 === 'sec-members') renderMembers();
+    if(activeId2 === 'sec-income')  renderIncomeTx();
+    if(activeId2 === 'sec-expense') renderExpenseTx();
+    if(activeId2 === 'sec-assoc')   renderAssoc();
     return false;
   }
 }
@@ -1713,6 +1713,16 @@ const NOTION_TRANSACTIONS = [
 ];
 
 const CURRENT_MONTH = String(new Date().getMonth() + 1);
+const CURRENT_YEAR  = String(new Date().getFullYear());
+
+// date 필드("2026-03-12") 또는 month 필드로 이번달 여부 판단
+function isThisMonth(t) {
+  if(t.date) {
+    const d = new Date(t.date);
+    return String(d.getMonth()+1) === CURRENT_MONTH && String(d.getFullYear()) === CURRENT_YEAR;
+  }
+  return t.month === CURRENT_MONTH;
+}
 
 // ══════════════════════════════════════════
 //  탭 전환
@@ -2074,7 +2084,7 @@ function renderTxItem(t, showOrder, idx, total, showEdit) {
 }
 
 function renderIncomeTx() {
-  const txs = loadTx().filter(t => t.type==='income' && t.month===CURRENT_MONTH);
+  const txs = loadTx().filter(t => t.type==='income' && isThisMonth(t));
   const el = document.getElementById('incomeTxList');
   el.innerHTML = txs.length === 0
     ? '<div class="empty-state"><div class="empty-icon">💰</div><p>아직 기록이 없어요</p></div>'
@@ -2082,7 +2092,7 @@ function renderIncomeTx() {
 }
 
 function renderExpenseTx() {
-  const txs = loadTx().filter(t => t.type==='expense' && t.month===CURRENT_MONTH);
+  const txs = loadTx().filter(t => t.type==='expense' && isThisMonth(t));
   const el = document.getElementById('expenseTxList');
   el.innerHTML = txs.length === 0
     ? '<div class="empty-state"><div class="empty-icon">📤</div><p>아직 기록이 없어요</p></div>'
@@ -2164,7 +2174,7 @@ function renderReport(bank) {
   const now = new Date();
   document.getElementById('reportMonth').textContent = `${now.getFullYear()}년 ${now.getMonth()+1}월`;
 
-  let txs = loadTx().filter(t => t.month === CURRENT_MONTH);
+  let txs = loadTx().filter(t => isThisMonth(t));
   if(bank !== '전체') txs = txs.filter(t => t.bank === bank);
 
   const totalIncome = txs.filter(t=>t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0);
@@ -2174,7 +2184,7 @@ function renderReport(bank) {
   document.getElementById('rep-expense').textContent = fmtMoney(totalExpense);
 
   // 통장별 이월 잔액
-  const allTxs = loadTx().filter(t => t.month === CURRENT_MONTH);
+  const allTxs = loadTx().filter(t => isThisMonth(t));
   const banks = bank === '전체' ? ['회비','레슨비','셔틀콕'] : [bank];
   const bankEmoji = { 회비:'💳', 레슨비:'🏋️', 셔틀콕:'🏸' };
   const carryoverEl = document.getElementById('reportCarryoverList');
@@ -2253,7 +2263,7 @@ function applySavedOrder(txs) {
 
 // ▲▼ 버튼: 항목 한 칸씩 이동
 function moveTxOrder(txId, dir) {
-  const txs = loadTx().filter(t => t.month === CURRENT_MONTH);
+  const txs = loadTx().filter(t => isThisMonth(t));
   let sorted = applySavedOrder(txs);
   const cur = sorted.findIndex(t => t.id === txId);
   if(cur < 0) return;
