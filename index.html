@@ -1526,16 +1526,9 @@ async function syncFromSupabase(silent) {
       _syncTxToSB(localTxs).catch(e => console.warn('[SB] TX 초기업로드 실패:', e));
     }
 
-    // ── 잔액: SB 우선, 없으면 로컬 기준 재계산 ──────
-    const balRows = await sbGet('balance', 'id=eq.main');
-    if(balRows && balRows.length > 0) {
-      const b = balRows[0];
-      localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify(
-        { '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 }
-      ));
-    } else {
-      recalcBalance();
-    }
+    // ── 잔액: TX 목록 기준 항상 재계산 ──────────────
+    // (SB balance는 신뢰하지 않음 — TX 삭제 타이밍 불일치로 잔액이 틀릴 수 있음)
+    recalcBalance();
 
     // ── 회원 커스텀 데이터: SB 항상 우선 ────────────
     const memRows  = await sbGet('members', 'id=neq.__tx_order__');
@@ -3582,12 +3575,17 @@ function saveTxEdit() {
   renderHome();
 }
 
-function deleteTx(id) {
+async function deleteTx(id) {
   if(!confirm('이 항목을 삭제할까요?')) return;
   const allTxs = loadTx().filter(t => String(t.id) !== String(id));
-  saveTxLocal(allTxs); // 로컬만 저장 (saveTx 시 삭제된 항목이 SB에 재업로드되는 문제 방지)
-  sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('[SB] TX 삭제 실패:', e));
-  recalcBalance();
+  saveTxLocal(allTxs);
+  // SB 삭제 완료 후 잔액 재계산 → SB balance도 정확한 값으로 업데이트
+  try {
+    await sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`);
+  } catch(e) {
+    console.warn('[SB] TX 삭제 실패:', e);
+  }
+  recalcBalance(); // SB 삭제 완료 후 실행 → saveBalance()가 올바른 잔액을 SB에 업로드
   showToast('🗑️ 삭제 완료');
   renderIncomeTx();
   renderExpenseTx();
