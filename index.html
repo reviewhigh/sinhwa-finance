@@ -1493,10 +1493,24 @@ async function syncFromSupabase(silent) {
   _isSyncing = true;
   setSyncStatus('syncing');
   try {
-    // 거래내역
+    // 거래내역 (버그 수정: Supabase 비어있을 때 로컬 데이터 보호)
     const txs = await sbGet('transactions', 'order=date.desc&limit=2000');
+    const localTxs = loadTx();
     if(txs && txs.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
+      if(txs.length >= localTxs.length) {
+        // Supabase가 같거나 더 많으면 → Supabase 기준으로 로컬 업데이트
+        localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
+      } else {
+        // 로컬이 더 많으면 → 로컬 데이터를 Supabase에 올리기
+        console.log('[SB] 로컬 데이터가 더 많음, 역방향 동기화 시작');
+        _syncTxToSB(localTxs).catch(e => console.warn('[SB] 역방향 동기화 실패:', e));
+      }
+    } else {
+      // Supabase가 비어있으면 → 로컬 데이터를 Supabase에 올리기 (로컬 덮어쓰기 안 함!)
+      if(localTxs.length > 0) {
+        console.log('[SB] Supabase 비어있음, 로컬 데이터 업로드 시작');
+        _syncTxToSB(localTxs).catch(e => console.warn('[SB] 초기 업로드 실패:', e));
+      }
     }
 
     // 잔액
@@ -3809,27 +3823,4 @@ window.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
 
-  updateTabVisibility();
-  initNotionData();
-  renderHome(); // 로컬 캐시로 일단 표시
-
-  // ── 최초 Supabase 로드 (로딩 오버레이 표시) ──
-  const overlay = document.getElementById('loadingOverlay');
-  if(overlay) {
-    // 첫 접속 시 로딩 화면 표시
-    overlay.style.display = 'flex';
-    await syncFromSupabase();
-    // 동기화 끝나면 오버레이 서서히 제거
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.4s';
-    setTimeout(() => { overlay.style.display = 'none'; }, 420);
-  } else {
-    await syncFromSupabase();
-  }
-
-  // ── 30초마다 자동 동기화 시작 ──
-  startAutoSync();
-});
-</script>
-</body>
-</html>
+  updateTabVisibili
