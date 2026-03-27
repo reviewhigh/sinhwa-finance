@@ -899,6 +899,11 @@
     <!-- 카톡 붙여넣기 -->
     <div class="card">
       <div class="card-title">📋 카톡 내용 붙여넣기</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+        <label style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap;">📅 예약 날짜</label>
+        <input type="date" id="cokReserveDate"
+          style="flex:1;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Pretendard',sans-serif;outline:none;"/>
+      </div>
       <textarea id="cokKakaoPaste"
         style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
         placeholder="예시:
@@ -3354,9 +3359,10 @@ function parseCsvContent(text) {
   const existing = loadTx();
   // 중복 감지: 날짜+금액 조합으로 비교 (노션/CSV 항목명이 달라도 같은 거래 인식)
   // 같은 날 같은 금액이 여러 건 있을 수 있어서 카운트 방식 사용
+  const normKey = s => (s||'').replace(/\s+/g,'').toLowerCase();
   const existingCountMap = {};
   existing.forEach(t => {
-    const k = t.date + '_' + t.amount;
+    const k = t.date + '_' + t.amount + '_' + normKey(t.name);
     existingCountMap[k] = (existingCountMap[k] || 0) + 1;
   });
 
@@ -3379,7 +3385,7 @@ function parseCsvContent(text) {
     // 날짜 변환: 2026.03.09 → 2026-03-09
     const date = rawDate.slice(0,10).replace(/\./g,'-');
     const item  = detail || memo || '미상';
-    const key   = date + '_' + amount;
+    const key   = date + '_' + amount + '_' + normKey(item);
 
     // 같은 날짜+금액이 기존에 몇 건인지, CSV에서 몇 번째 등장인지 비교
     if(!csvParsed._csvCountMap) csvParsed._csvCountMap = {};
@@ -3719,12 +3725,14 @@ async function saveCokReservations() {
     } catch(e) { /* 오프라인이면 로컬 기준으로 진행 */ }
 
     const now = Date.now();
+    const reserveDate = document.getElementById('cokReserveDate')?.value || today();
     const newItems = parsed.map((r, i) => ({
       id: 'cok_' + now + '_' + i,
       name: r.name,
       qty: r.qty,
       amount: r.amount,
       matched: false,
+      reserveDate: reserveDate,
       savedAt: new Date().toLocaleDateString('ko-KR'),
     }));
 
@@ -3754,6 +3762,58 @@ function clearAllCokReservations() {
   showToast('🗑️ 예약 목록 삭제됨');
 }
 
+// 수동 완료 처리
+function completeCokReservation(id) {
+  const list = loadCokReservations();
+  const idx = list.findIndex(r => r.id === id);
+  if(idx < 0) return;
+  list[idx] = { ...list[idx], matched: true };
+  saveCokReservations_store(list);
+  renderCokTab();
+  showToast('✅ 입금 완료 처리됨!');
+}
+
+function editCokReservation(id) {
+  const list = loadCokReservations();
+  const item = list.find(r => r.id === id);
+  if(!item) return;
+  const el = document.getElementById('cok-item-' + id);
+  if(!el) return;
+  el.innerHTML = `
+    <div style="flex:1;min-width:0;">
+      <input id="cok-edit-date-${id}" type="date" value="${item.reserveDate || today()}"
+        style="width:100%;margin-bottom:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;font-family:'Pretendard',sans-serif;box-sizing:border-box;"/>
+      <input id="cok-edit-name-${id}" type="text" value="${item.name}" placeholder="이름"
+        style="width:100%;margin-bottom:4px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:'Pretendard',sans-serif;box-sizing:border-box;"/>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input id="cok-edit-qty-${id}" type="number" value="${item.qty}" min="1"
+          style="width:70px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:'Pretendard',sans-serif;"/>
+        <span style="font-size:12px;color:var(--text-muted);">통</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;margin-left:8px;flex-shrink:0;align-self:center;">
+      <button onclick="saveCokEdit('${id}')"
+        style="font-size:12px;color:#fff;background:var(--green);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;">저장</button>
+      <button onclick="renderCokTab()"
+        style="font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;">취소</button>
+    </div>
+  `;
+}
+
+function saveCokEdit(id) {
+  const name = document.getElementById('cok-edit-name-' + id)?.value.trim();
+  const qty  = parseInt(document.getElementById('cok-edit-qty-' + id)?.value || '0');
+  const date = document.getElementById('cok-edit-date-' + id)?.value || today();
+  if(!name || qty < 1) { showToast('이름과 수량을 확인해주세요'); return; }
+  const list = loadCokReservations();
+  const idx  = list.findIndex(r => r.id === id);
+  if(idx < 0) return;
+  list[idx] = { ...list[idx], name, qty, amount: qty * COK_PRICE, reserveDate: date };
+  saveCokReservations_store(list);
+  renderCokTab();
+  showToast('✅ 예약 정보가 수정됩!');
+}
+
 function deleteCokReservation(id) {
   const list = loadCokReservations().filter(r => r.id !== id);
   saveCokReservations_store(list);
@@ -3780,12 +3840,21 @@ function renderCokTab() {
   if(pending.length) {
     html += `<div style="font-size:12px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">⏳ 입금 대기 (${pending.length}건)</div>`;
     html += pending.map(r => `
-      <div class="cok-reserve-item">
-        <div class="cok-name">${r.name}</div>
+      <div class="cok-reserve-item" id="cok-item-${r.id}">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate || r.savedAt || ''}</div>
+          <div class="cok-name">${r.name}</div>
+        </div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
-        <button onclick="deleteCokReservation('${r.id}')"
-          style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;margin-left:4px;">✕</button>
+        <div style="display:flex;gap:4px;margin-left:4px;flex-shrink:0;">
+          <button onclick="editCokReservation('${r.id}')"
+            style="font-size:11px;color:var(--green-bright);background:rgba(82,183,136,.1);border:1px solid rgba(82,183,136,.3);border-radius:6px;padding:2px 7px;cursor:pointer;">수정</button>
+          <button onclick="completeCokReservation('${r.id}')"
+            style="font-size:11px;color:var(--accent);background:rgba(82,183,136,.2);border:1px solid var(--green);border-radius:6px;padding:2px 7px;cursor:pointer;">완료</button>
+          <button onclick="deleteCokReservation('${r.id}')"
+            style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;">✕</button>
+        </div>
       </div>
     `).join('');
   }
@@ -3794,7 +3863,10 @@ function renderCokTab() {
     html += matched.map(r => `
       <div class="cok-reserve-item matched">
         <div class="cok-badge">완료</div>
-        <div class="cok-name">${r.name}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate || r.savedAt || ''}</div>
+          <div class="cok-name">${r.name}</div>
+        </div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
         <button onclick="deleteCokReservation('${r.id}')"
@@ -3854,13 +3926,88 @@ function matchCokReservations(csvItems) {
 }
 
 
+function matchCokReservationsFromHoebi(csvItems) {
+  const reserves = loadCokReservations().filter(r => !r.matched);
+  if(reserves.length === 0) return csvItems;
+
+  const normN = s => (s||'').replace(/\s+/g,'').toLowerCase();
+  const nameFuzzy = (rName, cName) => {
+    const rn = normN(rName), cn = normN(cName);
+    return rn === cn || rn.includes(cn) || cn.includes(rn);
+  };
+
+  let updated = [...loadCokReservations()];
+  const usedIds = new Set();
+  let matchCount = 0;
+
+  const result = csvItems.map(item => {
+    if(item.txType !== 'income') return item;
+    const memoRaw = (item.memo || '').trim();
+    const itemRaw = (item.item || '').trim();
+
+    // memo가 순수 숫자(1,2,3)면 그게 통수, 또는 콕N 패턴
+    let qty = 0;
+    const memoNum = memoRaw.match(/^(\d+)$/);
+    const kokPat  = memoRaw.match(/콕\s*(\d+)/i) || itemRaw.match(/콕\s*(\d+)/i);
+    if(memoNum) qty = parseInt(memoNum[1]);
+    else if(kokPat) qty = parseInt(kokPat[1]);
+
+    if(qty < 1) return item;
+
+    const reserve = reserves.find(r =>
+      !usedIds.has(r.id) && r.qty === qty && nameFuzzy(r.name, itemRaw)
+    ) || reserves.find(r =>
+      !usedIds.has(r.id) && r.qty === qty && item.amount === r.amount
+    ) || reserves.find(r =>
+      !usedIds.has(r.id) && item.amount === r.amount
+    );
+
+    if(reserve) {
+      usedIds.add(reserve.id);
+      const idx = updated.findIndex(r => r.id === reserve.id);
+      if(idx >= 0) updated[idx] = { ...updated[idx], matched: true };
+      matchCount++;
+    }
+    return item;
+  });
+
+  if(matchCount > 0) {
+    saveCokReservations_store(updated);
+    showToast(`🏸 회비계좌 콕예약 ${matchCount}건 자동 매칭!`);
+  }
+  return result;
+}
+
 function applyCsvTransactions() {
   let newItems = csvParsed.filter(r => !r.isDup);
   if(newItems.length === 0) return;
 
-  // ── 셔틀콕 통장: 예약 자동 매칭 ──
-  if(csvBank === '셔틀콕') {
+
+  // 셋틀콕/회비 통장: 예약 자동 매칭
+  if(csvBank === '셀틀콕') {
     newItems = matchCokReservations(newItems);
+  } else if(csvBank === '회비') {
+    newItems = matchCokReservationsFromHoebi(newItems);
+  }
+
+  // 이월 항목 감지: 사용자 확인
+  const carryoverItems = newItems.filter(r => {
+    const txt = ((r.memo||'') + ' ' + (r.item||'')).toLowerCase();
+    return txt.includes('이월') || txt.includes('예금이자') || (r.amount === 0);
+  });
+  if(carryoverItems.length > 0) {
+    const _names = carryoverItems.map(r => r.item || r.memo || '미상').join('
+  - ');
+    const _ok = confirm('아래 항목이 이월/이자 항목으로 감지되었어요:
+
+  - ' + _names + '
+
+이 항목도 함께 반영할까요?
+(취소 시 해당 항목은 제외됩니다)');
+    if(!_ok) {
+      const skipSet = new Set(carryoverItems.map(r => r.key));
+      newItems = newItems.filter(r => !skipSet.has(r.key));
+    }
   }
   const existing = loadTx();
   const now = Date.now();
@@ -3922,6 +4069,8 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 날짜 기본값
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
+  const cokDateEl = document.getElementById('cokReserveDate');
+  if(cokDateEl) cokDateEl.value = today();
 
   updateTabVisibility();
   initNotionData();
