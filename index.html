@@ -3353,8 +3353,7 @@ function extractName(raw) {
 
 function parseCsvContent(text) {
   text = text.replace(/^﻿/, '');
-  const lines = text.split(/?
-/);
+  const lines = text.split(/\r?\n/);
 
   // 헤더 행 찾기
   let headerRow = -1;
