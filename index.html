@@ -3483,6 +3483,7 @@ function renderCsvResult() {
   const newItems   = csvParsed.filter(r => !r.isDup);
   const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
   const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
+  const normalNew  = newItems.filter(r => r.nameMatch !== 'fuzzy');
   const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
 
   title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건'
@@ -3576,7 +3577,7 @@ function renderCsvResult() {
   const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
   const approvedItems = newItems.filter(r => r.approved);
 
-  title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건' +
+  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건' +
     (fuzzyItems.length ? ' / ❓확인필요 ' + fuzzyItems.length + '건' : '');
 
   list.innerHTML = csvParsed.map((r, idx) => {
