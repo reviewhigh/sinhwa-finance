@@ -899,10 +899,7 @@
     <!-- 카톡 붙여넣기 -->
     <div class="card">
       <div class="card-title">📋 카톡 내용 붙여넣기</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-        <label style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap;">📅 예약 날짜</label>
-        <input type="date" id="cokReserveDate" style="flex:1;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:'Pretendard',sans-serif;outline:none;"/>
-      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap;">📅 예약날짜</label><input type="date" id="cokReserveDate" style="flex:1;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Pretendard,sans-serif;outline:none;"/></div>
       <textarea id="cokKakaoPaste"
         style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
         placeholder="예시:
@@ -3777,20 +3774,61 @@ function editCokReservation(id) {
   if(!item) return;
   const el = document.getElementById('cok-item-' + id);
   if(!el) return;
-  const d = item.reserveDate || today();
-  el.innerHTML =
-    '<div style="flex:1;min-width:0;">' +
-      '<input id="ced-date-' + id + '" type="date" value="' + d + '" style="width:100%;margin-bottom:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;font-family:Pretendard,sans-serif;box-sizing:border-box;"/>' +
-      '<input id="ced-name-' + id + '" type="text" value="' + item.name + '" placeholder="이름" style="width:100%;margin-bottom:4px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:Pretendard,sans-serif;box-sizing:border-box;"/>' +
-      '<div style="display:flex;align-items:center;gap:6px;">' +
-        '<input id="ced-qty-' + id + '" type="number" value="' + item.qty + '" min="1" style="width:70px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;font-family:Pretendard,sans-serif;"/>' +
-        '<span style="font-size:12px;color:var(--text-muted);">통</span>' +
-      '</div>' +
-    '</div>' +
-    '<div style="display:flex;gap:4px;margin-left:8px;flex-shrink:0;align-self:center;">' +
-      '<button onclick="saveCokEdit('' + id + '')" style="font-size:12px;color:#fff;background:var(--green);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;">저장</button>' +
-      '<button onclick="renderCokTab()" style="font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;">취소</button>' +
-    '</div>';
+
+  // DOM API 방식으로 생성 (따옴표 충돌 없음)
+  el.innerHTML = '';
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'flex:1;min-width:0;';
+
+  const dateIn = document.createElement('input');
+  dateIn.type = 'date';
+  dateIn.id = 'ced-date-' + id;
+  dateIn.value = item.reserveDate || today();
+  dateIn.style.cssText = 'width:100%;margin-bottom:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;box-sizing:border-box;';
+  wrap.appendChild(dateIn);
+
+  const nameIn = document.createElement('input');
+  nameIn.type = 'text';
+  nameIn.id = 'ced-name-' + id;
+  nameIn.value = item.name;
+  nameIn.placeholder = '이름';
+  nameIn.style.cssText = 'width:100%;margin-bottom:4px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;box-sizing:border-box;';
+  wrap.appendChild(nameIn);
+
+  const qtyRow = document.createElement('div');
+  qtyRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
+  const qtyIn = document.createElement('input');
+  qtyIn.type = 'number';
+  qtyIn.id = 'ced-qty-' + id;
+  qtyIn.value = item.qty;
+  qtyIn.min = '1';
+  qtyIn.style.cssText = 'width:70px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;';
+  const qtyLabel = document.createElement('span');
+  qtyLabel.style.cssText = 'font-size:12px;color:var(--text-muted);';
+  qtyLabel.textContent = '통';
+  qtyRow.appendChild(qtyIn);
+  qtyRow.appendChild(qtyLabel);
+  wrap.appendChild(qtyRow);
+  el.appendChild(wrap);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = 'display:flex;gap:4px;margin-left:8px;flex-shrink:0;align-self:center;';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.textContent = '저장';
+  saveBtn.style.cssText = 'font-size:12px;color:#fff;background:var(--green);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;';
+  saveBtn.onclick = () => saveCokEdit(id);
+  btnRow.appendChild(saveBtn);
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.textContent = '취소';
+  cancelBtn.style.cssText = 'font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;';
+  cancelBtn.onclick = () => renderCokTab();
+  btnRow.appendChild(cancelBtn);
+
+  el.appendChild(btnRow);
+  el.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface3);margin-bottom:6px;';
 }
 
 function saveCokEdit(id) {
@@ -3835,12 +3873,12 @@ function renderCokTab() {
     html += pending.map(r => `
       <div class="cok-reserve-item" id="cok-item-${r.id}">
         <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate || r.savedAt || ''}</div>
+          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate||r.savedAt||''}</div>
           <div class="cok-name">${r.name}</div>
         </div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
-        <div style="display:flex;gap:4px;margin-left:4px;flex-shrink:0;">
+        <div style="display:flex;gap:4px;margin-left:4px;">
           <button onclick="editCokReservation('${r.id}')" style="font-size:11px;color:var(--green-bright);background:rgba(82,183,136,.1);border:1px solid rgba(82,183,136,.3);border-radius:6px;padding:2px 7px;cursor:pointer;">수정</button>
           <button onclick="completeCokReservation('${r.id}')" style="font-size:11px;color:var(--accent);background:rgba(82,183,136,.2);border:1px solid var(--green);border-radius:6px;padding:2px 7px;cursor:pointer;">완료</button>
           <button onclick="deleteCokReservation('${r.id}')" style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;">✕</button>
@@ -3853,10 +3891,7 @@ function renderCokTab() {
     html += matched.map(r => `
       <div class="cok-reserve-item matched">
         <div class="cok-badge">완료</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate || r.savedAt || ''}</div>
-          <div class="cok-name">${r.name}</div>
-        </div>
+        <div style="flex:1;min-width:0;"><div style="font-size:10px;color:var(--text-dim);">${r.reserveDate||r.savedAt||''}</div><div class="cok-name">${r.name}</div></div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
         <button onclick="deleteCokReservation('${r.id}')"
@@ -3956,7 +3991,7 @@ function matchCokReservationsFromHoebi(csvItems) {
   });
   if(matchCount > 0) {
     saveCokReservations_store(updated);
-    showToast('🏸 회비계좌 콜예약 ' + matchCount + '건 자동 매칭!');
+    showToast('🏸 회비계좌 콜예약 ' + matchCount + '건 매칭!');
   }
   return result;
 }
@@ -3966,22 +4001,22 @@ function applyCsvTransactions() {
   if(newItems.length === 0) return;
 
 
-  // 셋틀콕/회비 콜예약 자동 매칭
+  // 셋틀콕/회비 콜예약 매칭
   if(csvBank === '셋틀콕') {
     newItems = matchCokReservations(newItems);
   } else if(csvBank === '회비') {
     newItems = matchCokReservationsFromHoebi(newItems);
   }
 
-  // 이월/예금이자 항목 감지 후 사용자 확인
-  const _iStr = '이월', _yStr = '예금이자';
+  // 이월/예금이자 감지 후 확인
+  const _iw = '이월', _yg = '예금이자';
   const carryoverItems = newItems.filter(r => {
     const txt = ((r.memo||'') + ' ' + (r.item||'')).toLowerCase();
-    return txt.includes(_iStr) || txt.includes(_yStr) || r.amount === 0;
+    return txt.includes(_iw) || txt.includes(_yg) || r.amount === 0;
   });
   if(carryoverItems.length > 0) {
-    const _names = carryoverItems.map(r => r.item || r.memo || '미상').join('\n  - ');
-    const _ok = confirm('이월/예금이자 항목으로 감지된 내역이 있어요:\n\n  - ' + _names + '\n\n함께 반영할까요?\n(취소 시 해당 항목은 제외됩니다)');
+    const _nm = carryoverItems.map(r => r.item || r.memo || '미상').join('\n  - ');
+    const _ok = confirm('이월/예금이자 항목으로 감지된 내역이 있어요:\n\n  - ' + _nm + '\n\n함께 반영할까요?\n(취소 시 제외됨)');
     if(!_ok) {
       const skipSet = new Set(carryoverItems.map(r => r.key));
       newItems = newItems.filter(r => !skipSet.has(r.key));
@@ -4047,8 +4082,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 날짜 기본값
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
-  const cokDateEl = document.getElementById('cokReserveDate');
-  if(cokDateEl) cokDateEl.value = today();
+  const _cokDE=document.getElementById('cokReserveDate'); if(_cokDE) _cokDE.value=today();
 
   updateTabVisibility();
   initNotionData();
