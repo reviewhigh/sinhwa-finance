@@ -3585,9 +3585,23 @@ function renderCsvResult() {
   }).join('');
 
   const applyBtn = document.getElementById('csvApplyBtn');
-  const willApply = newItems.filter(r => r.approved).length;
-  applyBtn.textContent = willApply > 0 ? '✅ 신규 ' + willApply + '건 반영하기' : '신규 항목 없음';
-  applyBtn.disabled = willApply === 0;
+  // 반영할 항목: 일반 신규 + fuzzy 중 신규반영 선택한 것
+  const willApply = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
+  if(willApply === 0 && undecided === 0) {
+    applyBtn.textContent = '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
+    applyBtn.disabled = true;
+    applyBtn.style.opacity = '0.5';
+  } else if(willApply === 0 && undecided > 0) {
+    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74 \uacb0\uc815 \ud6c4 \ubc18\uc601 \uac00\ub2a5';
+    applyBtn.disabled = true;
+    applyBtn.style.opacity = '0.5';
+  } else {
+    // 반영 가능한 항목이 있으면 활성화 (미결정 fuzzy 경고는 텍스트에 표시)
+    const warnTxt = undecided > 0 ? ' (\u2753' + undecided + '\uac74 \ubbf8\uacb0\uc815)' : '';
+    applyBtn.textContent = '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30' + warnTxt;
+    applyBtn.disabled = false;
+    applyBtn.style.opacity = '1';
+  }
   card.style.display = '';
 }
 
