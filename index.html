@@ -3340,19 +3340,30 @@ function handleCsvFile(file) {
   reader.readAsText(file, 'UTF-8');
 }
 
+function extractName(raw) {
+  // 이름에서 콕 관련 접미사 제거: 콕N, 콕N통, 콕값, 콕N EA, 숫자, .콕...
+  // 예: "김영수콕값" → "김영수", "은희 콕1통" → "은희", "이지은.콕2EA" → "이지은"
+  let s = raw.trim();
+  s = s.replace(/[\.·]?콕[s수값통EAd]*/gi, ''); // 콕... 제거
+  s = s.replace(/콕값/g, '');                               // 콕값 제거
+  s = s.replace(/콕d*통?/g, '');                          // 콕1통 제거
+  s = s.replace(/d+s*(EA|통|수|통)?$/gi, '');        // 끝 숫자 제거
+  s = s.replace(/s+/g, '').trim();
+  return s;
+}
+
 function parseCsvContent(text) {
-  // BOM 제거
   text = text.replace(/^\uFEFF/, '');
   const lines = text.split(/\r?\n/);
 
-  // 헤더 행 찾기 (거래일시 포함 행)
+  // 헤더 행 찾기
   let headerRow = -1;
   for(let i = 0; i < lines.length; i++) {
     if(lines[i].includes('거래일시')) { headerRow = i; break; }
   }
   if(headerRow < 0) { showToast('올바른 카카오뱅크 CSV 형식이 아닙니다'); return; }
 
-  // 헤더에서 콜럼 위치 동적 파악
+  // 컬럼 위치 동적 파악
   const headerCols = parseCSVRow(lines[headerRow]);
   const colIdx = {};
   headerCols.forEach((h, i) => {
@@ -3366,10 +3377,16 @@ function parseCsvContent(text) {
 
   const dataStart = headerRow + 1;
   const existing = loadTx();
+
+  // 기존 거래에서 이름 Set 구축 (정규화)
+  const existingNames = new Set(existing.map(t => (t.name||'').replace(/\s+/g,'').toLowerCase()));
+
+  // 날짜+금액 기반 중복 카운트 (이름 정규화 후)
   const normKey = s => (s||'').replace(/\s+/g,'').toLowerCase();
   const existingCountMap = {};
   existing.forEach(t => {
-    const k = t.date + '_' + t.amount + '_' + normKey(t.name);
+    const cleanName = extractName(t.name || '');
+    const k = t.date + '_' + t.amount + '_' + normKey(cleanName);
     existingCountMap[k] = (existingCountMap[k] || 0) + 1;
   });
 
@@ -3380,32 +3397,49 @@ function parseCsvContent(text) {
     const row = parseCSVRow(lines[i]);
     if(!row || row.length < 3) continue;
 
-    const rawDate = (row[colIdx.date] || '').trim();
-    const gubun   = (row[colIdx.gubun] || '').trim();
-    const rawAmt  = (row[colIdx.amount] || '').trim().replace(/,/g,'').replace(/-/g,'');
-    const detail  = (row[colIdx.detail] || '').trim();
-    const memo    = colIdx.memo !== undefined ? (row[colIdx.memo] || '').trim() : '';
+    const rawDate  = (row[colIdx.date]   || '').trim();
+    const gubun    = (row[colIdx.gubun]  || '').trim();
+    const rawAmt   = (row[colIdx.amount] || '').trim().replace(/,/g,'').replace(/-/g,'');
+    const rawDetail = (row[colIdx.detail] || '').trim();
+    const memo     = colIdx.memo !== undefined ? (row[colIdx.memo] || '').trim() : '';
 
     if(!rawDate || !gubun || !rawAmt) continue;
     const amount = parseInt(rawAmt);
     if(isNaN(amount) || amount === 0) continue;
 
-    // 날짜 변환: 2026.03.09 → 2026-03-09
     const date = rawDate.slice(0,10).replace(/\./g,'-');
-    const item = detail || memo || '미상';
-    const key  = date + '_' + amount + '_' + normKey(item);
 
+    // 이름 정규화: 콕 관련 접미사 제거
+    const cleanName = extractName(rawDetail);
+    const item = cleanName || rawDetail;
+
+    const key = date + '_' + amount + '_' + normKey(cleanName);
     if(!csvParsed._csvCountMap) csvParsed._csvCountMap = {};
     csvParsed._csvCountMap[key] = (csvParsed._csvCountMap[key] || 0) + 1;
     const csvCount = csvParsed._csvCountMap[key];
     const isDup = (existingCountMap[key] || 0) >= csvCount;
 
+    // 이름 매칭 상태 판단
+    // exact: 완전일치, fuzzy: 부분일치(확인필요), none: 신규
+    const normClean = normKey(cleanName);
+    let nameMatch = 'none';
+    if(existingNames.has(normClean)) {
+      nameMatch = 'exact';
+    } else {
+      // 부분 매칭: 기존 이름이 cleanName을 포함하거나 반대
+      const fuzzyFound = [...existingNames].find(en =>
+        en.includes(normClean) || normClean.includes(en)
+      );
+      if(fuzzyFound) nameMatch = 'fuzzy';
+    }
+
     // 카테고리 자동 분류
-    let category = csvBank === '셀틀콕' ? '셀틀콕' : csvBank === '레슨비' ? '레슨비' : '기타';
+    let category = csvBank === '셀틀콕' ? '셀틀콕'
+      : csvBank === '레슨비' ? '레슨비' : '기타';
     if(csvBank === '회비') {
       if(gubun === '입금') category = '회비';
       else {
-        const nm = (detail + memo).toLowerCase();
+        const nm = (rawDetail + memo).toLowerCase();
         if(nm.includes('이용료')||nm.includes('대실')) category = '이용료';
         else if(nm.includes('간식')) category = '간식비';
         else if(nm.includes('레슨')) category = '레슨비';
@@ -3415,10 +3449,15 @@ function parseCsvContent(text) {
     }
 
     csvParsed.push({
-      date, amount, item, memo,
+      date, amount,
+      item,           // 정규화된 이름
+      rawItem: rawDetail, // 원본 (콕N 포함)
+      memo,
       account: csvBank,
       txType: gubun === '입금' ? 'income' : 'expense',
       category, key, isDup,
+      nameMatch,      // 'exact' | 'fuzzy' | 'none'
+      approved: isDup ? false : (nameMatch !== 'fuzzy'), // fuzzy는 기본 미승인
     });
   }
   renderCsvResult();
@@ -3436,41 +3475,55 @@ function parseCSVRow(line) {
   return result;
 }
 
-function renderCsvResult() {
-  const card = document.getElementById('csvResultCard');
-  const list = document.getElementById('csvResultList');
-  const title = document.getElementById('csvResultTitle');
-  if(csvParsed.length === 0) {
-    showToast('파싱된 거래 내역이 없습니다');
-    return;
+function toggleCsvApprove(idx) {
+  if(csvParsed[idx]) {
+    csvParsed[idx].approved = !csvParsed[idx].approved;
+    renderCsvResult();
   }
-  const newItems = csvParsed.filter(r => !r.isDup);
-  const dupItems = csvParsed.filter(r => r.isDup);
-  title.textContent = `📋 파싱 결과 — 신규 ${newItems.length}건 / 중복 ${dupItems.length}건`;
-  list.innerHTML = csvParsed.map(r => {
-    // 회비 입금이면 납입월 미리 파싱해서 표시
-    let monthBadge = '';
-    if(csvBank === '회비' && r.txType === 'income' && !r.isDup) {
-      const memoText = (r.memo||'') + ' ' + (r.item||'');
-      const parsed = parseMonthsFromMemo(memoText);
-      if(parsed.length) {
-        monthBadge = ` <span style="font-size:10px;background:rgba(82,183,136,.2);color:var(--green-bright);border-radius:4px;padding:1px 5px;margin-left:4px;">${parsed.map(m=>m+'월').join(' ')}</span>`;
-      }
+}
+
+function renderCsvResult() {
+  const card  = document.getElementById('csvResultCard');
+  const list  = document.getElementById('csvResultList');
+  const title = document.getElementById('csvResultTitle');
+  if(!csvParsed || csvParsed.length === 0) { showToast('파싱된 거래 내역이 없습니다'); return; }
+
+  const newItems   = csvParsed.filter(r => !r.isDup);
+  const dupItems   = csvParsed.filter(r =>  r.isDup);
+  const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
+  const approvedItems = newItems.filter(r => r.approved);
+
+  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건' +
+    (fuzzyItems.length ? ' / ❓확인필요 ' + fuzzyItems.length + '건' : '');
+
+  list.innerHTML = csvParsed.map((r, idx) => {
+    if(r.isDup) {
+      return '<div class="csv-item skip"><span>' + r.date + ' · ' + r.item + '</span><span>중복</span></div>';
     }
-    return `
-    <div class="csv-item ${r.isDup ? 'skip' : 'new'}">
-      <span>${r.date} · ${r.txType==='income'?'🟢':'🔴'} ${r.item}${monthBadge}</span>
-      <span>${r.isDup ? '중복' : (r.txType==='income'?'+':'-') + r.amount.toLocaleString()}</span>
-    </div>`;
+    if(r.nameMatch === 'fuzzy') {
+      const approved = r.approved;
+      return '<div class="csv-item" style="background:rgba(244,162,97,.12);border:1px solid rgba(244,162,97,.3);display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">' +
+        '<div>' +
+          '<div style="font-size:13px;color:var(--yellow);font-weight:600;">❓ ' + r.rawItem + ' → <b style="color:var(--accent);">' + r.item + '</b></div>' +
+          '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + r.date + ' · ' + r.amount.toLocaleString() + '원 · 이름 부분일치—승인하면 반영됩니다</div>' +
+        '</div>' +
+        '<button onclick="toggleCsvApprove(' + idx + ')" style="flex-shrink:0;margin-left:8px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:6px;border:none;cursor:pointer;' +
+          (approved ? 'background:var(--green);color:#fff;' : 'background:rgba(255,255,255,.08);color:var(--text-muted);') + '">' +
+          (approved ? '✅ 승인' : '승인') +
+        '</button>' +
+      '</div>';
+    }
+    // 일반 신규
+    return '<div class="csv-item new"><span>' + r.date + ' · ' + r.item + '</span><span>+' + r.amount.toLocaleString() + '</span></div>';
   }).join('');
+
   const applyBtn = document.getElementById('csvApplyBtn');
-  applyBtn.textContent = newItems.length > 0 ? `✅ 신규 ${newItems.length}건 반영하기` : '신규 항목 없음';
-  applyBtn.disabled = newItems.length === 0;
+  const willApply = newItems.filter(r => r.approved).length;
+  applyBtn.textContent = willApply > 0 ? '✅ 신규 ' + willApply + '건 반영하기' : '신규 항목 없음';
+  applyBtn.disabled = willApply === 0;
   card.style.display = '';
 }
 
-// ── 메모에서 납입월 파싱 ─────────────────────
-// 패턴: 1-3회비→[1,2,3] / 3,4회비→[3,4] / 3회비→[3] / 3월→[3] / 1월회비→[1]
 function parseMonthsFromMemo(memo) {
   if(!memo) return [];
   const s = memo.replace(/\s+/g,' ');
@@ -4004,7 +4057,7 @@ function matchCokReservationsFromHoebi(csvItems) {
 }
 
 function applyCsvTransactions() {
-  let newItems = csvParsed.filter(r => !r.isDup);
+  let newItems = csvParsed.filter(r => !r.isDup && r.approved !== false);
   if(newItems.length === 0) return;
 
 
