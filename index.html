@@ -3405,7 +3405,7 @@ function parseCsvContent(text) {
     const amount = parseInt(rawAmt);
     if(isNaN(amount) || amount === 0) continue;
 
-    const date      = rawDate.slice(0,10).replace(/\./g,'-');
+    const date      = rawDate.slice(0,10).split('.').join('-');
     const cleanName = extractName(rawName);   // 순수 이름
     const normName  = normStr(cleanName);
 
@@ -3485,7 +3485,7 @@ function renderCsvResult() {
   const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
   const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
 
-  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건'
+  title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건'
     + (fuzzyItems.length ? ' / ❓이름확인 ' + fuzzyItems.length + '건' : '');
 
   list.innerHTML = csvParsed.map((r, idx) => {
@@ -3576,7 +3576,7 @@ function renderCsvResult() {
   const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
   const approvedItems = newItems.filter(r => r.approved);
 
-  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건' +
+  title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건' +
     (fuzzyItems.length ? ' / ❓확인필요 ' + fuzzyItems.length + '건' : '');
 
   list.innerHTML = csvParsed.map((r, idx) => {
