@@ -64,6 +64,16 @@
     overflow-x: hidden;
   }
 
+  /* ── 납부자 확인 버튼 ── */
+  .amb-item { display:flex; align-items:flex-start; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .amb-item:last-child { border-bottom:none; }
+  .amb-label { font-size:13px; color:var(--text); flex:1 1 100%; margin-bottom:4px; }
+  .amb-sub { font-size:12px; color:var(--text-muted); }
+  .amb-btns { display:flex; gap:6px; flex-wrap:wrap; width:100%; }
+  .amb-btn { padding:5px 14px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:12px; cursor:pointer; transition:all .15s; }
+  .amb-btn:hover { background:var(--green); border-color:var(--green-light); }
+  .amb-btn-skip { background:transparent; color:var(--text-muted); }
+
   /* ── 배경 글로우 ── */
   body::before {
     content: '';
@@ -721,6 +731,12 @@
       <button class="bank-tab"        id="home-bank-hoebi" onclick="goToReport('회비')"  style="flex:1;font-size:12px;padding:7px 0;">💳 회비</button>
       <button class="bank-tab"        id="home-bank-lesson"onclick="goToReport('레슨비')" style="flex:1;font-size:12px;padding:7px 0;">🏋️ 레슨비</button>
       <button class="bank-tab"        id="home-bank-cok"   onclick="goToReport('셔틀콕')" style="flex:1;font-size:12px;padding:7px 0;">🏸 셔틀콕</button>
+    </div>
+
+    <!-- 납부자 이름 확인 배너 (관리자 전용) -->
+    <div class="card" id="ambiguousCard" style="display:none; border:1px solid var(--yellow);">
+      <div class="card-title" style="color:var(--yellow);">⚠️ 납부자 이름 확인 필요</div>
+      <div id="ambiguousList"></div>
     </div>
 
     <!-- 미납 현황 -->
@@ -2087,6 +2103,9 @@ function renderHome() {
   const totalBal = (bal['회비']||0) + (bal['레슨비']||0) + (bal['셔틀콕']||0);
   const totalEl = document.getElementById('bal-total');
   if(totalEl) totalEl.textContent = fmtMoney(totalBal);
+
+  // ambiguous 배너 갱신
+  renderAmbiguous();
 
   // 미납 (현재월 납부 안된 정회원/가족회원)
   const unpaid = getAllMembers().filter(m =>
@@ -3668,46 +3687,102 @@ function parseMonthsFromMemo(memo) {
     if(v >= 1 && v <= 12) found.add(v);
   });
 
+  // 패턴4: 숫자 단독 (메모에 "3" 또는 "03" 만 있는 경우)
+  [...s.matchAll(/(?:^|\s)(\d{1,2})(?:\s|$)/g)].forEach(m => {
+    const v = parseInt(m[1]);
+    if(v >= 1 && v <= 12) found.add(v);
+  });
+
   return [...found].sort((a,b)=>a-b).map(String);
 }
 
-// ── 이름으로 회원 찾아 납입월 업데이트 ──────────
-function applyMonthsToMember(memberName, newMonths) {
-  if(!memberName || !newMonths.length) return false;
+// ── 이름으로 회원 찾아 납입월 업데이트 (flex 버전) ──────────
+// csvAmbiguous: 동명이인 미결 항목 [ {rawInput, months, candidates:[{id,name}]} ]
+let csvAmbiguous = [];
 
-  // 이름 정규화: "김용상(황안순)" 형태 처리, 앞쪽 이름으로만 매칭
-  const baseName = memberName.split(/[\(（]/)[0].trim();
+function applyMonthsToMemberFlex(memberName, newMonths) {
+  if(!memberName || !newMonths.length) return 'notfound';
+  const baseName = memberName.split(/[(（]/)[0].trim();
   const all = getAllMembers();
+  const normBase = baseName.replace(/\s/g,'');
 
-  // 정확히 일치하는 회원 찾기 (공백 제거 후 비교)
-  const target = all.find(m => {
-    const mn = m.name.replace(/\s/g,'');
-    const bn = baseName.replace(/\s/g,'');
-    return mn === bn || mn.startsWith(bn) || bn.startsWith(mn);
-  });
-  if(!target) return false;
+  // 1단계: 정확 매칭
+  let target = all.find(m => m.name.replace(/\s/g,'') === normBase);
 
+  // 2단계: 성 제외 매칭
+  if(!target && normBase.length >= 2) {
+    const noSur = normBase.slice(1);
+    const cands = all.filter(m => {
+      const mn = m.name.replace(/\s/g,'');
+      return mn.length >= 2 && mn.slice(1) === noSur;
+    });
+    if(cands.length === 1) {
+      target = cands[0];
+    } else if(cands.length > 1) {
+      csvAmbiguous.push({ rawInput: memberName, months: newMonths,
+        candidates: cands.map(m => ({ id: m._id || m.name, name: m.name })) });
+      return 'ambiguous';
+    }
+  }
+
+  if(!target) return 'notfound';
+  return _doApplyMonths(target, newMonths) ? 'ok' : 'notfound';
+}
+
+function _doApplyMonths(target, newMonths) {
   const memberId = target._id || target.name;
   const custom   = loadCustomMembers();
   const isBase   = MEMBERS.some(m => m.name === memberId || m.name === target.name);
-
-  // 기존 months 가져오기
-  const existIdx  = custom.findIndex(m => m._id === memberId);
-  const prevData  = existIdx >= 0 ? custom[existIdx]
-                  : isBase ? (MEMBERS.find(m => m.name === (target._id||target.name)) || {})
-                  : {};
+  const existIdx = custom.findIndex(m => m._id === memberId);
+  const prevData = existIdx >= 0 ? custom[existIdx]
+                 : isBase ? (MEMBERS.find(m => m.name === (target._id||target.name)) || {})
+                 : {};
   const prevMonths = Array.isArray(prevData.months) ? [...prevData.months] : [];
-
-  // 새 달 추가 (중복 없이 병합)
   const merged = [...new Set([...prevMonths, ...newMonths])].sort((a,b)=>parseInt(a)-parseInt(b));
-
-  const saved = Object.assign({}, target, { _id: memberId, months: merged });
+  const saved  = Object.assign({}, target, { _id: memberId, months: merged });
   if(existIdx >= 0) custom[existIdx] = saved;
   else              custom.push(saved);
   saveCustomMembers(custom);
   return true;
 }
 
+// 하위 호환
+function applyMonthsToMember(memberName, newMonths) {
+  return applyMonthsToMemberFlex(memberName, newMonths) === 'ok';
+}
+
+function confirmAmbiguous(ambIdx, memberId) {
+  const item = csvAmbiguous[ambIdx];
+  if(!item) return;
+  const target = getAllMembers().find(m => (m._id || m.name) === memberId);
+  if(target) _doApplyMonths(target, item.months);
+  csvAmbiguous.splice(ambIdx, 1);
+  renderAmbiguous(); renderHome(); renderMembers();
+}
+
+function skipAmbiguous(ambIdx) {
+  csvAmbiguous.splice(ambIdx, 1);
+  renderAmbiguous();
+}
+
+function renderAmbiguous() {
+  const card = document.getElementById('ambiguousCard');
+  const list = document.getElementById('ambiguousList');
+  if(!card || !list) return;
+  if(!isAdmin || csvAmbiguous.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  list.innerHTML = csvAmbiguous.map((item, i) => `
+    <div class="amb-item">
+      <div class="amb-label"><strong>${item.rawInput}</strong>
+        <span class="amb-sub"> · ${item.months.map(m=>m+'월').join(', ')} 납부 — 아래 회원 중 누구인가요?</span>
+      </div>
+      <div class="amb-btns">
+        ${item.candidates.map(c=>`<button class="amb-btn" onclick="confirmAmbiguous(${i},'${c.id}')">${c.name}</button>`).join('')}
+        <button class="amb-btn amb-btn-skip" onclick="skipAmbiguous(${i})">건너뛰기</button>
+      </div>
+    </div>
+  `).join('');
+}
 // ══════════════════════════════════════════
 //  거래내역 수정 / 삭제
 // ══════════════════════════════════════════
@@ -4227,25 +4302,40 @@ function applyCsvTransactions() {
   if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] CSV TX bulk 실패:', e));
 
   // ── 회비 입금 항목: 메모에서 납입월 파싱 → 회원 자동 반영 ──
+  // 지원: 단독이름, 이름+월표기, 복수이름(소은 범규 3월), 성 제외 매칭, 동명이인 관리자 확인
   let autoApplied = 0;
+  csvAmbiguous = [];
   if(csvBank === '회비') {
     newItems.forEach(r => {
       if(r.txType !== 'income') return;
-      const memoText = (r.memo || '') + ' ' + (r.item || '');
-      const parsedMonths = parseMonthsFromMemo(memoText);
+      const fullText = (r.memo || '') + ' ' + (r.item || '');
+      const parsedMonths = parseMonthsFromMemo(fullText);
       if(!parsedMonths.length) return;
 
-      // item(내용)에서 회원 이름 추출: 첫 번째 단어 or 전체
-      const rawName = (r.item || '').trim();
-      const ok = applyMonthsToMember(rawName, parsedMonths);
-      if(ok) autoApplied++;
+      // item에서 월 표기 제거 후 한글 이름 토큰 추출
+      const itemClean = (r.item || '')
+        .replace(/\d{1,2}\s*[-~]\s*\d{1,2}\s*(?:회비|월)/g, '')
+        .replace(/\d{1,2}(?:\s*,\s*\d{1,2})+\s*(?:회비|월)/g, '')
+        .replace(/(?<!\d)\d{1,2}\s*(?:회비|월)/g, '')
+        .replace(/(?:^|\s)\d{1,2}(?:\s|$)/g, ' ')
+        .replace(/\s+/g, ' ').trim();
+
+      const nameTokens = itemClean.split(/\s+/).filter(t => /^[가-힣]{2,}$/.test(t));
+      if(!nameTokens.length) return;
+
+      nameTokens.forEach(name => {
+        const res = applyMonthsToMemberFlex(name, parsedMonths);
+        if(res === 'ok') autoApplied++;
+      });
     });
   }
 
-  const msg = autoApplied > 0
-    ? `✅ ${toAdd.length}건 반영 완료! (납입월 ${autoApplied}명 자동 업데이트)`
+    const ambCount = csvAmbiguous.length;
+  const msg = autoApplied > 0 || ambCount > 0
+    ? `✅ ${toAdd.length}건 반영 완료! (자동처리 ${autoApplied}명${ambCount > 0 ? ' · 확인필요 '+ambCount+'명' : ''})`
     : `✅ ${toAdd.length}건 반영 완료!`;
   showToast(msg);
+  renderAmbiguous();
   csvParsed = [];
   document.getElementById('csvResultCard').style.display = 'none';
   renderHome();
