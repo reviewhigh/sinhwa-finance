@@ -3342,18 +3342,18 @@ function handleCsvFile(file) {
 
 function extractName(raw) {
   let s = (raw || '').trim();
-  // 콕 관련 텍스트 제거: .콕, 콕값, 콕1, 콕1통, 콕1EA 등
-  s = s.replace(/[.\s]?콕s*d*s*(통|수|값|EA)?/gi, '');
-  // 끝에 붙은 숫자+단위 제거: "2통", "1", "2EA"
-  s = s.replace(/s*d+s*(통|EA)?$/g, '');
+  // 콕 관련 제거: 콕값, 콕1통, 콕1, .콕 등
+  s = s.replace(/[.\s]?콕[\s\uac12\ud1b5\d]*(EA)?/gi, '');
+  // 끝 숫자+단위 제거: "이성화2", "김기희 2" 등
+  s = s.replace(/\s*\d+\s*(\ud1b5|EA)?$/g, '');
   // 공백 정리
-  s = s.replace(/s+/g, '').trim();
+  s = s.replace(/\s+/g, '').trim();
   return s;
 }
 
 function parseCsvContent(text) {
   text = text.replace(/^﻿/, '');
-  const lines = text.replace(/\r\n/g,'\n').split('\n');
+  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
 
   // 헤더 행 찾기
   let headerRow = -1;
