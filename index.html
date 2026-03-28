@@ -3465,67 +3465,78 @@ function renderCsvResult() {
   const card  = document.getElementById('csvResultCard');
   const list  = document.getElementById('csvResultList');
   const title = document.getElementById('csvResultTitle');
-  if(!csvParsed || csvParsed.length === 0) { showToast('\ud30c\uc2f1\ub41c \uac70\ub798 \ub0b4\uc5ed\uc774 \uc5c6\uc2b5\ub2c8\ub2e4'); return; }
+  if(!csvParsed || csvParsed.length === 0) {
+    showToast('\ud30c\uc2f1\ub41c \uac70\ub798 \ub0b4\uc5ed\uc774 \uc5c6\uc2b5\ub2c8\ub2e4');
+    return;
+  }
 
-  const dupItems   = csvParsed.filter(r => r.isDup);
-  const newItems   = csvParsed.filter(r => !r.isDup);
-  const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
-  const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
+  const dupItems   = csvParsed.filter(function(r){ return r.isDup; });
+  const newItems   = csvParsed.filter(function(r){ return !r.isDup; });
+  const fuzzyItems = newItems.filter(function(r){ return r.nameMatch === 'fuzzy'; });
+  const undecided  = fuzzyItems.filter(function(r){ return r.fuzzyChoice === null; }).length;
+  const normalNew  = newItems.filter(function(r){ return r.nameMatch !== 'fuzzy'; });
 
-  title.textContent = '\uD83D\uDCCB \ud30c\uc2f1 \uacb0\uacfc \u2014 \uc2e0\uaddc ' + newItems.length + '\uac74 / \uc911\ubcf5 ' + dupItems.length + '\uac74'
+  title.textContent = '\uD83D\uDCCB \ud30c\uc2f1 \uacb0\uacfc \u2014 \uc2e0\uaddc '
+    + newItems.length + '\uac74 / \uc911\ubcf5 ' + dupItems.length + '\uac74'
     + (fuzzyItems.length ? ' / \u2753\uc774\ub984 \ud655\uc778 ' + fuzzyItems.length + '\uac74' : '');
 
-  list.innerHTML = csvParsed.map((r, idx) => {
-    // 중복
+  var html = '';
+  for(var i = 0; i < csvParsed.length; i++) {
+    var r = csvParsed[i];
     if(r.isDup) {
-      return '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
+      html += '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
         + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
         + '<span>\uc911\ubcf5</span></div>';
-    }
-    // 부분일치 — 중복처리 or 신규반영 선택
-    if(r.nameMatch === 'fuzzy') {
-      const ch = r.fuzzyChoice;
-      return '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.4);border-radius:10px;padding:12px;margin-bottom:6px;">'
+    } else if(r.nameMatch === 'fuzzy') {
+      var ch = r.fuzzyChoice;
+      var dupBg  = ch === true  ? 'rgba(120,120,120,.35)' : 'var(--surface3)';
+      var dupCol = ch === true  ? '#ddd' : 'var(--text-muted)';
+      var dupBdr = ch === true  ? 'var(--text-muted)' : 'var(--border)';
+      var newBg  = ch === false ? 'rgba(82,183,136,.25)' : 'var(--surface3)';
+      var newCol = ch === false ? 'var(--green-bright)' : 'var(--text-muted)';
+      var newBdr = ch === false ? 'var(--green-bright)' : 'var(--border)';
+      html += '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.4);border-radius:10px;padding:12px;margin-bottom:6px;">'
         + '<div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:4px;">'
           + '\u2753 ' + r.rawItem + ' \u2192 <span style="color:var(--accent);">' + r.item + '</span>'
         + '</div>'
         + '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">'
-          + r.date + ' \u00b7 +' + r.amount.toLocaleString() + '\uc6d0 \u00b7 DB\uc758 \uc774\uc740\ud76c\uc640 \ubd80\ubd84\uc77c\uce58 \u2014 \uc2b9\uc778\ud558\uba74 \ubc18\uc601'
+          + r.date + ' \u00b7 +' + r.amount.toLocaleString() + '\uc6d0 \u00b7 \uc774\uc740\ud76c\uc640 \ubd80\ubd84\uc77c\uce58'
         + '</div>'
         + '<div style="display:flex;gap:8px;">'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',true)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid '
-            + (ch===true ? 'var(--text-muted)' : 'var(--border)') + ';background:'
-            + (ch===true ? 'rgba(120,120,120,.35)' : 'var(--surface3)') + ';color:'
-            + (ch===true ? '#ddd' : 'var(--text-muted)') + ';font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;">'
-            + (ch===true ? '\u2705 ' : '') + '\uc911\ubcf5 (\ubb34\uc2dc)'
+          + '<button onclick="toggleCsvFuzzy(' + i + ',true)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid ' + dupBdr + ';background:' + dupBg + ';color:' + dupCol + ';font-size:13px;font-weight:700;cursor:pointer;">'
+            + (ch === true ? '\u2705 ' : '') + '\uc911\ubcf5 (\ubb34\uc2dc)'
           + '</button>'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',false)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid '
-            + (ch===false ? 'var(--green-bright)' : 'var(--border)') + ';background:'
-            + (ch===false ? 'rgba(82,183,136,.25)' : 'var(--surface3)') + ';color:'
-            + (ch===false ? 'var(--green-bright)' : 'var(--text-muted)') + ';font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;">'
-            + (ch===false ? '\u2705 ' : '') + '\uc2e0\uaddc \ubc18\uc601'
+          + '<button onclick="toggleCsvFuzzy(' + i + ',false)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid ' + newBdr + ';background:' + newBg + ';color:' + newCol + ';font-size:13px;font-weight:700;cursor:pointer;">'
+            + (ch === false ? '\u2705 ' : '') + '\uc2e0\uaddc \ubc18\uc601'
           + '</button>'
         + '</div>'
       + '</div>';
+    } else {
+      html += '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
+        + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
+        + '<span>+' + r.amount.toLocaleString() + '</span></div>';
     }
-    // 일반 신규
-    return '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
-      + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
-      + '<span>+' + r.amount.toLocaleString() + '</span></div>';
-  }).join('');
+  }
+  list.innerHTML = html;
 
-  const applyBtn = document.getElementById('csvApplyBtn');
-  if(undecided > 0) {
-    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74\uc744 \uba3c\uc800 \uacb0\uc815\ud574\uc8fc\uc138\uc694';
+  // 반영 버튼 상태
+  var applyBtn = document.getElementById('csvApplyBtn');
+  // 반영 대상: 일반신규 + fuzzy 중 신규반영 선택한 것
+  var willApply = normalNew.length + fuzzyItems.filter(function(r){ return r.fuzzyChoice === false; }).length;
+
+  if(willApply === 0 && undecided === 0) {
+    applyBtn.textContent = '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
+    applyBtn.disabled = true;
+    applyBtn.style.opacity = '0.5';
+  } else if(willApply === 0 && undecided > 0) {
+    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74 \uacb0\uc815 \ud6c4 \ubc18\uc601 \uac00\ub2a5';
     applyBtn.disabled = true;
     applyBtn.style.opacity = '0.5';
   } else {
-    const willApply = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
-    applyBtn.textContent = willApply > 0
-      ? '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30'
-      : '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
-    applyBtn.disabled = willApply === 0;
-    applyBtn.style.opacity = willApply > 0 ? '1' : '0.5';
+    var warnTxt = undecided > 0 ? ' (\u2753' + undecided + '\uac74 \ubbf8\uacb0\uc815)' : '';
+    applyBtn.textContent = '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30' + warnTxt;
+    applyBtn.disabled = false;
+    applyBtn.style.opacity = '1';
   }
   card.style.display = '';
 }
