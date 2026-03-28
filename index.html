@@ -3221,11 +3221,11 @@ function updateTabVisibility() {
   });
   const badge = document.getElementById('modeBadge');
   if(isAdmin) {
-    badge.textContent = '관리자 ⚙️';
+    badge.textContent = '회원';
     badge.className = 'mode-badge admin';
     badge.onclick = exitAdmin;
   } else {
-    badge.textContent = '회원';
+    badge.textContent = '관리자';
     badge.className = 'mode-badge member';
     badge.onclick = () => openPin(null);
   }
@@ -3342,57 +3342,57 @@ function handleCsvFile(file) {
 
 function extractName(raw) {
   let s = (raw || '').trim();
-  s = s.replace(/[·.]?\ucf55\s*\d*\s*(\ud1b5|\uc218|\uac12|EA)?\s*/gi, '');
-  s = s.replace(/\ucf55\s*\d*/gi, '');
-  s = s.replace(/\s*\d+\s*(\ud1b5|EA)?\s*$/g, '');
-  s = s.replace(/\s+/g, '').trim();
+  // 콕 관련 텍스트 제거: .콕, 콕값, 콕1, 콕1통, 콕1EA 등
+  s = s.replace(/[.\s]?콕s*d*s*(통|수|값|EA)?/gi, '');
+  // 끝에 붙은 숫자+단위 제거: "2통", "1", "2EA"
+  s = s.replace(/s*d+s*(통|EA)?$/g, '');
+  // 공백 정리
+  s = s.replace(/s+/g, '').trim();
   return s;
 }
 
 function parseCsvContent(text) {
-  text = text.replace(/^\uFEFF/, '');
-  const lines = text.split(/\r?\n/);
+  text = text.replace(/^﻿/, '');
+  const lines = text.replace(/\r\n/g,'\n').split('\n');
 
+  // 헤더 행 찾기
   let headerRow = -1;
   for(let i = 0; i < lines.length; i++) {
-    if(lines[i].includes('\uac70\ub798\uc77c\uc2dc')) { headerRow = i; break; }
+    if(lines[i].includes('거래일시')) { headerRow = i; break; }
   }
-  if(headerRow < 0) { showToast('\uc62c\ubc14\ub978 CSV \ud615\uc2dd\uc774 \uc544\ub2d9\ub2c8\ub2e4'); return; }
+  if(headerRow < 0) { showToast('올바른 카카오뱅크 CSV 형식이 아닙니다'); return; }
 
+  // 컬럼 위치 동적 파악
   const headerCols = parseCSVRow(lines[headerRow]);
   const ci = {};
   headerCols.forEach((h, i) => {
     const hh = h.trim();
-    if(hh === '\uac70\ub798\uc77c\uc2dc') ci.date = i;
-    else if(hh === '\uad6c\ubd84') ci.gubun = i;
-    else if(hh === '\uac70\ub798\uae08\uc561') ci.amount = i;
-    else if(hh === '\ub0b4\uc6a9') ci.detail = i;
-    else if(hh === '\uba54\ubaa8') ci.memo = i;
+    if(hh === '거래일시') ci.date = i;
+    else if(hh === '구분') ci.gubun = i;
+    else if(hh === '거래금액') ci.amount = i;
+    else if(hh === '내용') ci.detail = i;
+    else if(hh === '메모') ci.memo = i;
   });
 
   const dataStart = headerRow + 1;
   const existing  = loadTx();
-  const normStr   = s => (s||'').replace(/\s+/g,'').toLowerCase();
+  const normStr   = s => (s||'').replace(/s+/g,'').toLowerCase();
 
-  // ★ 기존 TX name도 extractName()으로 정규화해서 중복 판단
-  // "김영수1" → "김영수", "이성화2" → "이성화" 등 처리
+  // 기존 TX 이름 Set (정규화) — 중복/부분일치 판단용
+  const exNameSet = new Set(existing.map(t => normStr(extractName(t.name || ''))));
+
+  // 날짜+금액+정규화이름 카운트맵 — 완전중복 판단용
   const exCountMap = {};
   existing.forEach(t => {
-    const clean = extractName(t.name || '');
-    const k = t.date + '|' + t.amount + '|' + normStr(clean);
+    const k = t.date + '|' + t.amount + '|' + normStr(extractName(t.name || ''));
     exCountMap[k] = (exCountMap[k] || 0) + 1;
   });
-
-  // 기존 정규화 이름 Set (fuzzy 판단용)
-  const exNameSet = new Set(
-    existing.map(t => normStr(extractName(t.name || ''))).filter(n => n.length >= 2)
-  );
 
   csvParsed = [];
   const csvCountMap = {};
 
   for(let i = dataStart; i < lines.length; i++) {
-    const row = parseCSVRow(lines[i]);
+    const row     = parseCSVRow(lines[i]);
     if(!row || row.length < 3) continue;
 
     const rawDate  = (row[ci.date]   || '').trim();
@@ -3405,56 +3405,68 @@ function parseCsvContent(text) {
     const amount = parseInt(rawAmt);
     if(isNaN(amount) || amount === 0) continue;
 
-    const date      = rawDate.slice(0,10).replace(/\./g,'-');
-    const cleanName = extractName(rawName);
+    const date      = rawDate.slice(0,10).replace(/./g,'-');
+    const cleanName = extractName(rawName);   // 순수 이름
     const normName  = normStr(cleanName);
 
-    // 날짜+금액+정규화이름 완전일치 → 중복
+    // 중복 판단: 날짜+금액+정규화이름 완전일치
     const key = date + '|' + amount + '|' + normName;
     csvCountMap[key] = (csvCountMap[key] || 0) + 1;
     const isDup = (exCountMap[key] || 0) >= csvCountMap[key];
 
-    // 신규인데 이름이 기존과 부분일치 → fuzzy (선택 필요)
-    // 완전일치 신규 (같은 이름, 다른 날짜/금액) → 그냥 신규로 처리
+    // 이름 매칭 상태
+    // exact: 정규화이름이 기존 Set에 그대로 있음
+    // fuzzy: 기존 이름이 내 이름을 포함하거나 반대 (예: 이은희↔은희)
     let nameMatch = 'none';
-    if(!isDup && normName.length >= 2) {
-      const fuzzy = [...exNameSet].find(en =>
-        en.length >= 2 &&
-        en !== normName && // 완전일치는 제외
-        (en.includes(normName) || normName.includes(en))
-      );
-      if(fuzzy) nameMatch = 'fuzzy';
+    if(!isDup) {
+      if(exNameSet.has(normName)) {
+        nameMatch = 'exact';
+      } else {
+        const fuzzy = [...exNameSet].find(en =>
+          en.length >= 2 && normName.length >= 2 &&
+          (en.includes(normName) || normName.includes(en))
+        );
+        if(fuzzy) nameMatch = 'fuzzy';
+      }
     }
 
     // 카테고리
-    let category = csvBank === '\uc140\ud2c0\ucf55' ? '\uc140\ud2c0\ucf55'
-      : csvBank === '\ub808\uc2a8\ube44' ? '\ub808\uc2a8\ube44' : '\uae30\ud0c0';
-    if(csvBank === '\ud68c\ube44') {
-      if(gubun === '\uc785\uae08') category = '\ud68c\ube44';
+    let category = csvBank === '셀틀콕' ? '셀틀콕'
+      : csvBank === '레슨비' ? '레슨비' : '기타';
+    if(csvBank === '회비') {
+      if(gubun === '입금') category = '회비';
       else {
         const nm = (rawName + memo).toLowerCase();
-        if(nm.includes('\uc774\uc6a9\ub8cc')||nm.includes('\ub300\uc2e4')) category = '\uc774\uc6a9\ub8cc';
-        else if(nm.includes('\uac04\uc2dd')) category = '\uac04\uc2dd\ube44';
-        else if(nm.includes('\ub808\uc2a8')) category = '\ub808\uc2a8\ube44';
-        else if(nm.includes('\ucf90\uc2dc\ubc31')) category = '\ucf90\uc2dc\ubc31';
-        else category = '\ube44\ud488';
+        if(nm.includes('이용료')||nm.includes('대실')) category = '이용료';
+        else if(nm.includes('간식')) category = '간식비';
+        else if(nm.includes('레슨')) category = '레슨비';
+        else if(nm.includes('쾐시백')) category = '쾐시백';
+        else category = '비품';
       }
     }
 
     csvParsed.push({
       date, amount,
-      item: cleanName,
-      rawItem: rawName,
+      item: cleanName,      // 정규화된 이름 (반영 시 사용)
+      rawItem: rawName,      // 원본 (표시용)
       memo, account: csvBank,
-      txType: gubun === '\uc785\uae08' ? 'income' : 'expense',
+      txType: gubun === '입금' ? 'income' : 'expense',
       category, key, isDup, nameMatch,
+      // fuzzy: 기본값 null(미결정), true=중복처리, false=신규반영
       fuzzyChoice: null,
+      // approved: isDup이면 false, fuzzy면 미결정(null), 나머지 true
+      get approved() {
+        if(this.isDup) return false;
+        if(this.nameMatch === 'fuzzy') return this.fuzzyChoice === false; // false=신규반영
+        return true;
+      }
     });
   }
   renderCsvResult();
 }
 
 function toggleCsvFuzzy(idx, asDup) {
+  // asDup=true → 중복처리(반영안함), false → 신규반영(반영)
   if(csvParsed[idx]) {
     csvParsed[idx].fuzzyChoice = asDup;
     renderCsvResult();
@@ -3465,78 +3477,71 @@ function renderCsvResult() {
   const card  = document.getElementById('csvResultCard');
   const list  = document.getElementById('csvResultList');
   const title = document.getElementById('csvResultTitle');
-  if(!csvParsed || csvParsed.length === 0) {
-    showToast('\ud30c\uc2f1\ub41c \uac70\ub798 \ub0b4\uc5ed\uc774 \uc5c6\uc2b5\ub2c8\ub2e4');
-    return;
-  }
+  if(!csvParsed || csvParsed.length === 0) { showToast('파싱된 거래 내역이 없습니다'); return; }
 
-  const dupItems   = csvParsed.filter(function(r){ return r.isDup; });
-  const newItems   = csvParsed.filter(function(r){ return !r.isDup; });
-  const fuzzyItems = newItems.filter(function(r){ return r.nameMatch === 'fuzzy'; });
-  const undecided  = fuzzyItems.filter(function(r){ return r.fuzzyChoice === null; }).length;
-  const normalNew  = newItems.filter(function(r){ return r.nameMatch !== 'fuzzy'; });
+  const dupItems   = csvParsed.filter(r => r.isDup);
+  const newItems   = csvParsed.filter(r => !r.isDup);
+  const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
+  const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
+  const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
 
-  title.textContent = '\uD83D\uDCCB \ud30c\uc2f1 \uacb0\uacfc \u2014 \uc2e0\uaddc '
-    + newItems.length + '\uac74 / \uc911\ubcf5 ' + dupItems.length + '\uac74'
-    + (fuzzyItems.length ? ' / \u2753\uc774\ub984 \ud655\uc778 ' + fuzzyItems.length + '\uac74' : '');
+  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건'
+    + (fuzzyItems.length ? ' / ❓이름확인 ' + fuzzyItems.length + '건' : '');
 
-  var html = '';
-  for(var i = 0; i < csvParsed.length; i++) {
-    var r = csvParsed[i];
+  list.innerHTML = csvParsed.map((r, idx) => {
+    // 중복
     if(r.isDup) {
-      html += '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
-        + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
-        + '<span>\uc911\ubcf5</span></div>';
-    } else if(r.nameMatch === 'fuzzy') {
-      var ch = r.fuzzyChoice;
-      var dupBg  = ch === true  ? 'rgba(120,120,120,.35)' : 'var(--surface3)';
-      var dupCol = ch === true  ? '#ddd' : 'var(--text-muted)';
-      var dupBdr = ch === true  ? 'var(--text-muted)' : 'var(--border)';
-      var newBg  = ch === false ? 'rgba(82,183,136,.25)' : 'var(--surface3)';
-      var newCol = ch === false ? 'var(--green-bright)' : 'var(--text-muted)';
-      var newBdr = ch === false ? 'var(--green-bright)' : 'var(--border)';
-      html += '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.4);border-radius:10px;padding:12px;margin-bottom:6px;">'
-        + '<div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:4px;">'
-          + '\u2753 ' + r.rawItem + ' \u2192 <span style="color:var(--accent);">' + r.item + '</span>'
+      return '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;">'
+        + '<span>' + r.date + ' · ' + (r.item||r.rawItem) + '</span>'
+        + '<span>중복</span></div>';
+    }
+    // 부분일치 — 중복처리 or 신규반영 선택
+    if(r.nameMatch === 'fuzzy') {
+      const choice = r.fuzzyChoice; // null=미결, true=중복, false=신규
+      const dupActive = choice === true;
+      const newActive = choice === false;
+      return '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.35);border-radius:10px;padding:10px 12px;margin-bottom:6px;">'
+        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
+          + '<div>'
+            + '<div style="font-size:13px;font-weight:600;color:var(--yellow);">❓ ' + r.rawItem
+              + ' → <span style="color:var(--accent);">' + r.item + '</span></div>'
+            + '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">'
+              + r.date + ' · +' + r.amount.toLocaleString() + '원 · 이름 부분일치</div>'
+          + '</div>'
+          + '<div style="font-size:11px;color:var(--text-dim);">'
+            + (choice === null ? '⚠️ 결정필요' : choice ? '무시됨' : '반영됨')
+          + '</div>'
         + '</div>'
-        + '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">'
-          + r.date + ' \u00b7 +' + r.amount.toLocaleString() + '\uc6d0 \u00b7 \uc774\uc740\ud76c\uc640 \ubd80\ubd84\uc77c\uce58'
-        + '</div>'
-        + '<div style="display:flex;gap:8px;">'
-          + '<button onclick="toggleCsvFuzzy(' + i + ',true)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid ' + dupBdr + ';background:' + dupBg + ';color:' + dupCol + ';font-size:13px;font-weight:700;cursor:pointer;">'
-            + (ch === true ? '\u2705 ' : '') + '\uc911\ubcf5 (\ubb34\uc2dc)'
+        + '<div style="display:flex;gap:6px;">'
+          + '<button onclick="toggleCsvFuzzy(' + idx + ',true)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
+            + (dupActive ? 'var(--text-muted)' : 'var(--border)') + ';background:'
+            + (dupActive ? 'rgba(100,100,100,.4)' : 'rgba(255,255,255,.04)') + ';color:'
+            + (dupActive ? '#fff' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
+            + (dupActive ? '✅ ' : '') + '중복처리 (무시)'
           + '</button>'
-          + '<button onclick="toggleCsvFuzzy(' + i + ',false)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid ' + newBdr + ';background:' + newBg + ';color:' + newCol + ';font-size:13px;font-weight:700;cursor:pointer;">'
-            + (ch === false ? '\u2705 ' : '') + '\uc2e0\uaddc \ubc18\uc601'
+          + '<button onclick="toggleCsvFuzzy(' + idx + ',false)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
+            + (newActive ? 'var(--green)' : 'var(--border)') + ';background:'
+            + (newActive ? 'rgba(82,183,136,.25)' : 'rgba(255,255,255,.04)') + ';color:'
+            + (newActive ? 'var(--green-bright)' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
+            + (newActive ? '✅ ' : '') + '신규반영'
           + '</button>'
         + '</div>'
       + '</div>';
-    } else {
-      html += '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
-        + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
-        + '<span>+' + r.amount.toLocaleString() + '</span></div>';
     }
-  }
-  list.innerHTML = html;
+    // 일반 신규
+    return '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;">'
+      + '<span>' + r.date + ' · ' + (r.item||r.rawItem) + '</span>'
+      + '<span>+' + r.amount.toLocaleString() + '</span></div>';
+  }).join('');
 
-  // 반영 버튼 상태
-  var applyBtn = document.getElementById('csvApplyBtn');
-  // 반영 대상: 일반신규 + fuzzy 중 신규반영 선택한 것
-  var willApply = normalNew.length + fuzzyItems.filter(function(r){ return r.fuzzyChoice === false; }).length;
-
-  if(willApply === 0 && undecided === 0) {
-    applyBtn.textContent = '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
+  const applyBtn = document.getElementById('csvApplyBtn');
+  if(undecided > 0) {
+    applyBtn.textContent = '⚠️ 이름확인 ' + undecided + '건 결정 후 반영하세요';
     applyBtn.disabled = true;
-    applyBtn.style.opacity = '0.5';
-  } else if(willApply === 0 && undecided > 0) {
-    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74 \uacb0\uc815 \ud6c4 \ubc18\uc601 \uac00\ub2a5';
-    applyBtn.disabled = true;
-    applyBtn.style.opacity = '0.5';
   } else {
-    var warnTxt = undecided > 0 ? ' (\u2753' + undecided + '\uac74 \ubbf8\uacb0\uc815)' : '';
-    applyBtn.textContent = '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30' + warnTxt;
-    applyBtn.disabled = false;
-    applyBtn.style.opacity = '1';
+    const wA = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
+    applyBtn.textContent = wA > 0 ? '✅ 신규 ' + wA + '건 반영하기' : '신규 항목 없음';
+    applyBtn.disabled = wA === 0;
   }
   card.style.display = '';
 }
@@ -3596,23 +3601,9 @@ function renderCsvResult() {
   }).join('');
 
   const applyBtn = document.getElementById('csvApplyBtn');
-  // 반영할 항목: 일반 신규 + fuzzy 중 신규반영 선택한 것
-  const willApply = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
-  if(willApply === 0 && undecided === 0) {
-    applyBtn.textContent = '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
-    applyBtn.disabled = true;
-    applyBtn.style.opacity = '0.5';
-  } else if(willApply === 0 && undecided > 0) {
-    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74 \uacb0\uc815 \ud6c4 \ubc18\uc601 \uac00\ub2a5';
-    applyBtn.disabled = true;
-    applyBtn.style.opacity = '0.5';
-  } else {
-    // 반영 가능한 항목이 있으면 활성화 (미결정 fuzzy 경고는 텍스트에 표시)
-    const warnTxt = undecided > 0 ? ' (\u2753' + undecided + '\uac74 \ubbf8\uacb0\uc815)' : '';
-    applyBtn.textContent = '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30' + warnTxt;
-    applyBtn.disabled = false;
-    applyBtn.style.opacity = '1';
-  }
+  const willApply = newItems.filter(r => r.approved).length;
+  applyBtn.textContent = willApply > 0 ? '✅ 신규 ' + willApply + '건 반영하기' : '신규 항목 없음';
+  applyBtn.disabled = willApply === 0;
   card.style.display = '';
 }
 
