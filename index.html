@@ -3405,7 +3405,7 @@ function parseCsvContent(text) {
     const amount = parseInt(rawAmt);
     if(isNaN(amount) || amount === 0) continue;
 
-    const date      = rawDate.slice(0,10).replace(/./g,'-');
+    const date      = rawDate.slice(0,10).replace(/\./g,'-');
     const cleanName = extractName(rawName);   // 순수 이름
     const normName  = normStr(cleanName);
 
