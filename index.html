@@ -3341,12 +3341,11 @@ function handleCsvFile(file) {
 }
 
 function extractName(raw) {
-  // 이름에서 숫자, 콕 관련 텍스트, 단위 등 제거
   let s = (raw || '').trim();
-  s = s.replace(/[.·]?콕s*d*s*(통|수|값|EA)?s*/gi, ''); // 콕N통/콕값/콕1EA
-  s = s.replace(/콕s*d*/gi, '');           // 콕N
-  s = s.replace(/s*d+s*(통|EA)?s*$/g, ''); // 끝 숫자/단위
-  s = s.replace(/s+/g, '').trim();
+  s = s.replace(/[·.]?\ucf55\s*\d*\s*(\ud1b5|\uc218|\uac12|EA)?\s*/gi, '');
+  s = s.replace(/\ucf55\s*\d*/gi, '');
+  s = s.replace(/\s*\d+\s*(\ud1b5|EA)?\s*$/g, '');
+  s = s.replace(/\s+/g, '').trim();
   return s;
 }
 
@@ -3354,14 +3353,12 @@ function parseCsvContent(text) {
   text = text.replace(/^\uFEFF/, '');
   const lines = text.split(/\r?\n/);
 
-  // 헤더 행 찾기
   let headerRow = -1;
   for(let i = 0; i < lines.length; i++) {
     if(lines[i].includes('\uac70\ub798\uc77c\uc2dc')) { headerRow = i; break; }
   }
-  if(headerRow < 0) { showToast('\uc62c\ubc14\ub978 \uce74\uce74\uc624\ubc45\ud06c CSV \ud615\uc2dd\uc774 \uc544\ub2d9\ub2c8\ub2e4'); return; }
+  if(headerRow < 0) { showToast('\uc62c\ubc14\ub978 CSV \ud615\uc2dd\uc774 \uc544\ub2d9\ub2c8\ub2e4'); return; }
 
-  // 컬럼 위치 동적 파악
   const headerCols = parseCSVRow(lines[headerRow]);
   const ci = {};
   headerCols.forEach((h, i) => {
@@ -3377,20 +3374,19 @@ function parseCsvContent(text) {
   const existing  = loadTx();
   const normStr   = s => (s||'').replace(/\s+/g,'').toLowerCase();
 
-  // ★ 핵심: 기존 TX name도 extractName()으로 정규화해서 Set 구성
-  // Supabase에 "김영수1", "이성화2" 처럼 숫자 붙어 저장된 것도 정확히 처리
-  const exNameSet = new Set(
-    existing.map(t => normStr(extractName(t.name || '')))
-      .filter(n => n.length >= 2)
-  );
-
-  // 날짜+금액+정규화이름 카운트맵 (중복 판단)
+  // ★ 기존 TX name도 extractName()으로 정규화해서 중복 판단
+  // "김영수1" → "김영수", "이성화2" → "이성화" 등 처리
   const exCountMap = {};
   existing.forEach(t => {
-    const cleanName = extractName(t.name || '');
-    const k = t.date + '|' + t.amount + '|' + normStr(cleanName);
+    const clean = extractName(t.name || '');
+    const k = t.date + '|' + t.amount + '|' + normStr(clean);
     exCountMap[k] = (exCountMap[k] || 0) + 1;
   });
+
+  // 기존 정규화 이름 Set (fuzzy 판단용)
+  const exNameSet = new Set(
+    existing.map(t => normStr(extractName(t.name || ''))).filter(n => n.length >= 2)
+  );
 
   csvParsed = [];
   const csvCountMap = {};
@@ -3413,27 +3409,21 @@ function parseCsvContent(text) {
     const cleanName = extractName(rawName);
     const normName  = normStr(cleanName);
 
-    // 중복 판단: 날짜+금액+정규화이름 완전일치
+    // 날짜+금액+정규화이름 완전일치 → 중복
     const key = date + '|' + amount + '|' + normName;
     csvCountMap[key] = (csvCountMap[key] || 0) + 1;
     const isDup = (exCountMap[key] || 0) >= csvCountMap[key];
 
-    // 이름 매칭 상태 판단 (신규 항목만)
+    // 신규인데 이름이 기존과 부분일치 → fuzzy (선택 필요)
+    // 완전일치 신규 (같은 이름, 다른 날짜/금액) → 그냥 신규로 처리
     let nameMatch = 'none';
     if(!isDup && normName.length >= 2) {
-      if(exNameSet.has(normName)) {
-        // 정규화 이름 완전일치지만 날짜/금액이 달라서 isDup=false인 경우
-        // → 그냥 신규로 처리 (같은 사람의 다른 날짜 입금)
-        nameMatch = 'exact';
-      } else {
-        // 부분일치: 기존 이름이 내 이름을 포함하거나 내 이름이 기존을 포함
-        // 단, 2글자 이상일 때만 (오탐 방지)
-        const fuzzy = [...exNameSet].find(en =>
-          en.length >= 2 && normName.length >= 2 &&
-          (en.includes(normName) || normName.includes(en))
-        );
-        if(fuzzy) nameMatch = 'fuzzy';
-      }
+      const fuzzy = [...exNameSet].find(en =>
+        en.length >= 2 &&
+        en !== normName && // 완전일치는 제외
+        (en.includes(normName) || normName.includes(en))
+      );
+      if(fuzzy) nameMatch = 'fuzzy';
     }
 
     // 카테고리
@@ -3483,42 +3473,37 @@ function renderCsvResult() {
   const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
 
   title.textContent = '\uD83D\uDCCB \ud30c\uc2f1 \uacb0\uacfc \u2014 \uc2e0\uaddc ' + newItems.length + '\uac74 / \uc911\ubcf5 ' + dupItems.length + '\uac74'
-    + (fuzzyItems.length ? ' / \u2753\uc774\ub984\ud655\uc778 ' + fuzzyItems.length + '\uac74' : '');
+    + (fuzzyItems.length ? ' / \u2753\uc774\ub984 \ud655\uc778 ' + fuzzyItems.length + '\uac74' : '');
 
   list.innerHTML = csvParsed.map((r, idx) => {
+    // 중복
     if(r.isDup) {
       return '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">'
         + '<span>' + r.date + ' \u00b7 ' + (r.item || r.rawItem) + '</span>'
         + '<span>\uc911\ubcf5</span></div>';
     }
+    // 부분일치 — 중복처리 or 신규반영 선택
     if(r.nameMatch === 'fuzzy') {
-      const choice = r.fuzzyChoice;
-      const dupActive = choice === true;
-      const newActive = choice === false;
-      return '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.35);border-radius:10px;padding:10px 12px;margin-bottom:6px;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
-          + '<div>'
-            + '<div style="font-size:13px;font-weight:600;color:var(--yellow);">\u2753 ' + r.rawItem
-              + ' \u2192 <span style="color:var(--accent);">' + r.item + '</span></div>'
-            + '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">'
-              + r.date + ' \u00b7 +' + r.amount.toLocaleString() + '\uc6d0 \u00b7 \uc774\ub984 \ubd80\ubd84\uc77c\uce58</div>'
-          + '</div>'
-          + '<div style="font-size:11px;color:' + (choice===null?'var(--yellow)':'var(--text-dim)') + ';">'
-            + (choice === null ? '\u26a0\ufe0f \uacb0\uc815\ud544\uc694' : choice ? '\ubb34\uc2dc' : '\ubc18\uc601')
-          + '</div>'
+      const ch = r.fuzzyChoice;
+      return '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.4);border-radius:10px;padding:12px;margin-bottom:6px;">'
+        + '<div style="font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:4px;">'
+          + '\u2753 ' + r.rawItem + ' \u2192 <span style="color:var(--accent);">' + r.item + '</span>'
         + '</div>'
-        + '<div style="display:flex;gap:6px;">'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',true)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
-            + (dupActive ? 'var(--text-muted)' : 'var(--border)') + ';background:'
-            + (dupActive ? 'rgba(100,100,100,.35)' : 'rgba(255,255,255,.04)') + ';color:'
-            + (dupActive ? '#ccc' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
-            + (dupActive ? '\u2705 ' : '') + '\uc911\ubcf5\ucc98\ub9ac (\ubb34\uc2dc)'
+        + '<div style="font-size:11px;color:var(--text-dim);margin-bottom:10px;">'
+          + r.date + ' \u00b7 +' + r.amount.toLocaleString() + '\uc6d0 \u00b7 DB\uc758 \uc774\uc740\ud76c\uc640 \ubd80\ubd84\uc77c\uce58 \u2014 \uc2b9\uc778\ud558\uba74 \ubc18\uc601'
+        + '</div>'
+        + '<div style="display:flex;gap:8px;">'
+          + '<button onclick="toggleCsvFuzzy(' + idx + ',true)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid '
+            + (ch===true ? 'var(--text-muted)' : 'var(--border)') + ';background:'
+            + (ch===true ? 'rgba(120,120,120,.35)' : 'var(--surface3)') + ';color:'
+            + (ch===true ? '#ddd' : 'var(--text-muted)') + ';font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;">'
+            + (ch===true ? '\u2705 ' : '') + '\uc911\ubcf5 (\ubb34\uc2dc)'
           + '</button>'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',false)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
-            + (newActive ? 'var(--green)' : 'var(--border)') + ';background:'
-            + (newActive ? 'rgba(82,183,136,.25)' : 'rgba(255,255,255,.04)') + ';color:'
-            + (newActive ? 'var(--green-bright)' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
-            + (newActive ? '\u2705 ' : '') + '\uc2e0\uaddc\ubc18\uc601'
+          + '<button onclick="toggleCsvFuzzy(' + idx + ',false)" style="flex:1;padding:8px 0;border-radius:8px;border:1px solid '
+            + (ch===false ? 'var(--green-bright)' : 'var(--border)') + ';background:'
+            + (ch===false ? 'rgba(82,183,136,.25)' : 'var(--surface3)') + ';color:'
+            + (ch===false ? 'var(--green-bright)' : 'var(--text-muted)') + ';font-size:13px;font-weight:700;cursor:pointer;transition:all .15s;">'
+            + (ch===false ? '\u2705 ' : '') + '\uc2e0\uaddc \ubc18\uc601'
           + '</button>'
         + '</div>'
       + '</div>';
@@ -3531,12 +3516,16 @@ function renderCsvResult() {
 
   const applyBtn = document.getElementById('csvApplyBtn');
   if(undecided > 0) {
-    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984\ud655\uc778 ' + undecided + '\uac74 \uacb0\uc815 \ud6c4 \ubc18\uc601\ud558\uc138\uc694';
+    applyBtn.textContent = '\u26a0\ufe0f \uc774\ub984 \ud655\uc778 ' + undecided + '\uac74\uc744 \uba3c\uc800 \uacb0\uc815\ud574\uc8fc\uc138\uc694';
     applyBtn.disabled = true;
+    applyBtn.style.opacity = '0.5';
   } else {
     const willApply = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
-    applyBtn.textContent = willApply > 0 ? '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30' : '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
+    applyBtn.textContent = willApply > 0
+      ? '\u2705 \uc2e0\uaddc ' + willApply + '\uac74 \ubc18\uc601\ud558\uae30'
+      : '\uc2e0\uaddc \ud56d\ubaa9 \uc5c6\uc74c';
     applyBtn.disabled = willApply === 0;
+    applyBtn.style.opacity = willApply > 0 ? '1' : '0.5';
   }
   card.style.display = '';
 }
