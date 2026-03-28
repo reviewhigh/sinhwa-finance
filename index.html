@@ -2238,7 +2238,23 @@ function renderReport(bank) {
           <div style="font-size:10px;color:var(--text-dim);">현재 잔액</div>
         </div>
       </div>`;
-  }).join('');
+  }).join('') + (() => {
+    if(bank !== '전체') return '';
+    const totalBal = ['회비','레슨비','셔틀콕'].reduce((sum, b) => {
+      const carryover = allTxs.filter(t=>t.bank===b&&t.memo==='이월').reduce((s,t)=>s+t.amount,0);
+      const income    = allTxs.filter(t=>t.bank===b&&t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0);
+      const expense   = allTxs.filter(t=>t.bank===b&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
+      return sum + carryover + income - expense;
+    }, 0);
+    return `
+      <div class="summary-row" style="margin-top:6px;padding-top:10px;border-top:1px solid rgba(255,255,255,.15);">
+        <div style="font-weight:700;font-size:14px;color:var(--accent);">💰 전체 합계</div>
+        <div style="text-align:right;">
+          <div style="font-weight:800;font-size:17px;color:var(--accent);">${fmtMoney(totalBal)}</div>
+          <div style="font-size:10px;color:var(--text-dim);">3개 통장 합산</div>
+        </div>
+      </div>`;
+  })();
 
   // 카테고리별 지출
   const expTxs = txs.filter(t=>t.type==='expense');
@@ -3482,8 +3498,8 @@ function renderCsvResult() {
   const dupItems   = csvParsed.filter(r => r.isDup);
   const newItems   = csvParsed.filter(r => !r.isDup);
   const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
-  const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
   const normalNew  = newItems.filter(r => r.nameMatch !== 'fuzzy');
+  const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
   const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
 
   title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건'
