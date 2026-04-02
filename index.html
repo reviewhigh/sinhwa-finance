@@ -1495,7 +1495,19 @@ async function syncFromSupabase() {
     const memRows = await sbGet('members', 'id=not.like.__tx_order__');
     if(memRows && memRows.length > 0) {
       const mems = memRows.map(r => r.data).filter(Boolean);
-      if(mems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
+      if(mems.length > 0) {
+        // Supabase에 저장된 type이 하드코딩 MEMBERS와 다른 경우 원본 type 복원
+        // (단 _typeChanged:true 플래그 있으면 관리자가 의도적으로 변경한 것이므로 유지)
+        const corrected = mems.map(function(m) {
+          if(!m || !m._id || m._typeChanged) return m;
+          const orig = MEMBERS.find(function(om){ return om.name === m._id; });
+          if(orig && m.type && m.type !== orig.type) {
+            return Object.assign({}, m, { type: orig.type });
+          }
+          return m;
+        });
+        localStorage.setItem('sinwha_members_v2', JSON.stringify(corrected));
+      }
     }
 
     const cokRows = await sbGet('cok_reservations', '');
@@ -1720,7 +1732,28 @@ function switchTab(tab) {
 //  노션 데이터 → 로컬스토리지 초기화
 // ══════════════════════════════════════════
 function initNotionData() {
-  const existing = loadTx();
+  let existing = loadTx();
+
+  // ── 기존 이월 항목 memo 정규화 (nt01/nt02/nt05 등 이미 저장된 것도 교정) ──
+  const CARRYOVER_IDS = new Set(['nt01','nt02','nt05']);
+  let needResave = false;
+  existing = existing.map(t => {
+    if(CARRYOVER_IDS.has(t.id) && t.memo !== '이월') {
+      needResave = true;
+      return Object.assign({}, t, { memo: '이월' });
+    }
+    // name에 '이월' 포함되고 type이 income인 경우도 memo를 '이월'로 교정
+    if(t.type === 'income' && t.name && t.name.includes('이월') && t.memo !== '이월') {
+      needResave = true;
+      return Object.assign({}, t, { memo: '이월' });
+    }
+    return t;
+  });
+  if(needResave) {
+    localStorage.setItem('sinwha_tx', JSON.stringify(existing));
+    // 잔액도 재계산 (이월이 수입에서 빠지지 않으므로 여기서는 변경 없음)
+  }
+
   const existingIds = new Set(existing.map(t => t.id));
   const toAdd = [];
 
