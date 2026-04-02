@@ -64,16 +64,6 @@
     overflow-x: hidden;
   }
 
-  /* ── 납부자 확인 버튼 ── */
-  .amb-item { display:flex; align-items:flex-start; gap:8px; padding:10px 0; border-bottom:1px solid var(--border); flex-wrap:wrap; }
-  .amb-item:last-child { border-bottom:none; }
-  .amb-label { font-size:13px; color:var(--text); flex:1 1 100%; margin-bottom:4px; }
-  .amb-sub { font-size:12px; color:var(--text-muted); }
-  .amb-btns { display:flex; gap:6px; flex-wrap:wrap; width:100%; }
-  .amb-btn { padding:5px 14px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); font-size:12px; cursor:pointer; transition:all .15s; }
-  .amb-btn:hover { background:var(--green); border-color:var(--green-light); }
-  .amb-btn-skip { background:transparent; color:var(--text-muted); }
-
   /* ── 배경 글로우 ── */
   body::before {
     content: '';
@@ -697,46 +687,21 @@
 
     <!-- 잔액 카드 -->
     <div class="balance-grid">
-      <div class="balance-card hoebi" onclick="goToReport('회비')" style="cursor:pointer;">
+      <div class="balance-card hoebi">
         <div class="balance-label">💳 회비 통장</div>
         <div class="balance-amount" id="bal-hoebi">0원</div>
-        <div class="balance-sub">카카오뱅크 · 탭하면 리포트 보기</div>
+        <div class="balance-sub">카카오뱅크</div>
       </div>
-      <div class="balance-card lesson" onclick="goToReport('레슨비')" style="cursor:pointer;">
+      <div class="balance-card lesson">
         <div class="balance-label">🏋️ 레슨비 통장</div>
         <div class="balance-amount" id="bal-lesson">0원</div>
-        <div class="balance-sub">카카오뱅크 · 탭하면 리포트 보기</div>
+        <div class="balance-sub">카카오뱅크</div>
       </div>
-      <div class="balance-card shuttlecock" onclick="goToReport('셔틀콕')" style="cursor:pointer;">
+      <div class="balance-card shuttlecock">
         <div class="balance-label">🏸 셔틀콕 통장</div>
         <div class="balance-amount" id="bal-shuttlecock">0원</div>
-        <div class="balance-sub">카카오뱅크 · 탭하면 리포트 보기</div>
+        <div class="balance-sub">카카오뱅크</div>
       </div>
-    </div>
-
-    <!-- 홈 전체 합계 -->
-    <div class="balance-card" id="bal-total-card" onclick="goToReport('전체')" style="cursor:pointer;margin-bottom:10px;background:linear-gradient(135deg,var(--surface2),var(--surface3));border:1px solid var(--green);display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-radius:var(--radius);">
-      <div>
-        <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">💰 전체 통장 합계</div>
-        <div style="font-size:10px;color:var(--text-dim);">회비 + 레슨비 + 셔틀콕 · 탭하면 리포트</div>
-      </div>
-      <div style="text-align:right;">
-        <div style="font-size:20px;font-weight:800;color:var(--accent);" id="bal-total">0원</div>
-      </div>
-    </div>
-
-    <!-- 홈 리포트 미니 탭 -->
-    <div style="display:flex;gap:6px;margin-bottom:12px;">
-      <button class="bank-tab active" id="home-bank-all"   onclick="goToReport('전체')"  style="flex:1;font-size:12px;padding:7px 0;">전체</button>
-      <button class="bank-tab"        id="home-bank-hoebi" onclick="goToReport('회비')"  style="flex:1;font-size:12px;padding:7px 0;">💳 회비</button>
-      <button class="bank-tab"        id="home-bank-lesson"onclick="goToReport('레슨비')" style="flex:1;font-size:12px;padding:7px 0;">🏋️ 레슨비</button>
-      <button class="bank-tab"        id="home-bank-cok"   onclick="goToReport('셔틀콕')" style="flex:1;font-size:12px;padding:7px 0;">🏸 셔틀콕</button>
-    </div>
-
-    <!-- 납부자 이름 확인 배너 (관리자 전용) -->
-    <div class="card" id="ambiguousCard" style="display:none; border:1px solid var(--yellow);">
-      <div class="card-title" style="color:var(--yellow);">⚠️ 납부자 이름 확인 필요</div>
-      <div id="ambiguousList"></div>
     </div>
 
     <!-- 미납 현황 -->
@@ -934,7 +899,6 @@
     <!-- 카톡 붙여넣기 -->
     <div class="card">
       <div class="card-title">📋 카톡 내용 붙여넣기</div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><label style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap;">📅 예약날짜</label><input type="date" id="cokReserveDate" style="flex:1;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;font-family:Pretendard,sans-serif;outline:none;"/></div>
       <textarea id="cokKakaoPaste"
         style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
         placeholder="예시:
@@ -1664,6 +1628,7 @@ const MEMBERS = [
   { name: '성도영',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '경기',  협회비: false, gender: '남', ageGroup: '20~30', cityRank: 'D', districtRank: 'D', birth: '1995-12-06', joinDate: '', phone: '010-2553-5096' },
   { name: '김현혜',       type: '정회원',      fee: 25000, months: ['3'],                     amount: 25000, role: '홍보',  협회비: false, gender: '여', ageGroup: '40', cityRank: 'D', districtRank: 'D', birth: '1989-10-30', joinDate: '', phone: '010-5878-2412' },
   { name: '김형묵',       type: '정회원',      fee: 25000, months: ['1','2','3','4'],         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'D', birth: '1965-07-19', joinDate: '', phone: '010-6418-1133' },
+  { name: '이보미',       type: '정회원',      fee: 25000, months: ['2'],                     amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1998-05-06', joinDate: '2026-01-28', phone: '010-9794-9234' },
   { name: '김태동',       type: '정회원',      fee: 25000, months: ['2','3','4','5','6'],     amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
   { name: '노충호',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1966-12-24', joinDate: '', phone: '010-4661-9465', note: '매월25입금' },
   { name: '노재술',       type: '정회원',      fee: 25000, months: [],                       amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1968-05-25', joinDate: '', phone: '010-5855-6006', note: '군무원' },
@@ -1792,21 +1757,6 @@ function isThisMonth(t) {
 // ══════════════════════════════════════════
 //  탭 전환
 // ══════════════════════════════════════════
-function goToReport(bank) {
-  // 리포트 탭으로 이동하면서 해당 통장 선택
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('sec-report').classList.add('active');
-  const tabEl = document.getElementById('tab-report');
-  if(tabEl) tabEl.classList.add('active');
-  // 리포트 통장 버튼 활성화
-  document.querySelectorAll('.report-bank-tab').forEach(b => {
-    b.classList.toggle('active', b.dataset.bank === bank);
-  });
-  reportBank = bank;
-  renderReport(bank);
-}
-
 function switchTab(tab) {
   // 관리자 전용 탭 접근 차단
   const adminTabs = ['income','expense','csv','cok','audit'];
@@ -2098,13 +2048,6 @@ function renderHome() {
   document.getElementById('bal-hoebi').textContent = fmtMoney(bal['회비']||0);
   document.getElementById('bal-lesson').textContent = fmtMoney(bal['레슨비']||0);
   document.getElementById('bal-shuttlecock').textContent = fmtMoney(bal['셔틀콕']||0);
-  // 전체 합계
-  const totalBal = (bal['회비']||0) + (bal['레슨비']||0) + (bal['셔틀콕']||0);
-  const totalEl = document.getElementById('bal-total');
-  if(totalEl) totalEl.textContent = fmtMoney(totalBal);
-
-  // ambiguous 배너 갱신
-  renderAmbiguous();
 
   // 미납 (현재월 납부 안된 정회원/가족회원)
   const unpaid = getAllMembers().filter(m =>
@@ -3277,11 +3220,11 @@ function updateTabVisibility() {
   });
   const badge = document.getElementById('modeBadge');
   if(isAdmin) {
-    badge.textContent = '회원';
+    badge.textContent = '관리자 ⚙️';
     badge.className = 'mode-badge admin';
     badge.onclick = exitAdmin;
   } else {
-    badge.textContent = '관리자';
+    badge.textContent = '회원';
     badge.className = 'mode-badge member';
     badge.onclick = () => openPin(null);
   }
@@ -3396,211 +3339,80 @@ function handleCsvFile(file) {
   reader.readAsText(file, 'UTF-8');
 }
 
-function extractName(raw) {
-  let s = (raw || '').trim();
-  // 콕 관련 제거: 콕값, 콕1통, 콕1, .콕 등
-  s = s.replace(/[.\s]?콕[\s\uac12\ud1b5\d]*(EA)?/gi, '');
-  // 끝 숫자+단위 제거: "이성화2", "김기희 2" 등
-  s = s.replace(/\s*\d+\s*(\ud1b5|EA)?$/g, '');
-  // 공백 정리
-  s = s.replace(/\s+/g, '').trim();
-  return s;
-}
-
 function parseCsvContent(text) {
-  text = text.replace(/^﻿/, '');
-  const lines = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  // BOM 제거
+  text = text.replace(/^\uFEFF/, '');
+  const lines = text.split(/\r?\n/);
 
-  // 헤더 행 찾기
-  let headerRow = -1;
-  for(let i = 0; i < lines.length; i++) {
-    if(lines[i].includes('거래일시')) { headerRow = i; break; }
+  // 헤더 행 찾기 (거래일시 포함 행)
+  let dataStart = -1;
+  for(let i=0; i<lines.length; i++) {
+    if(lines[i].includes('거래일시')) { dataStart = i+1; break; }
   }
-  if(headerRow < 0) { showToast('올바른 카카오뱅크 CSV 형식이 아닙니다'); return; }
+  if(dataStart < 0) { showToast('올바른 카카오뱅크 CSV 형식이 아닙니다'); return; }
 
-  // 컬럼 위치 동적 파악
-  const headerCols = parseCSVRow(lines[headerRow]);
-  const ci = {};
-  headerCols.forEach((h, i) => {
-    const hh = h.trim();
-    if(hh === '거래일시') ci.date = i;
-    else if(hh === '구분') ci.gubun = i;
-    else if(hh === '거래금액') ci.amount = i;
-    else if(hh === '내용') ci.detail = i;
-    else if(hh === '메모') ci.memo = i;
-  });
-
-  const dataStart = headerRow + 1;
-  const existing  = loadTx();
-  const normStr   = s => (s||'').replace(/s+/g,'').toLowerCase();
-
-  // 기존 TX 이름 Set (정규화) — 중복/부분일치 판단용
-  const exNameSet = new Set(existing.map(t => normStr(extractName(t.name || ''))));
-
-  // 날짜+금액+정규화이름 카운트맵 — 완전중복 판단용
-  const exCountMap = {};
+  const existing = loadTx();
+  // 중복 감지: 날짜+금액 조합으로 비교 (노션/CSV 항목명이 달라도 같은 거래 인식)
+  // 같은 날 같은 금액이 여러 건 있을 수 있어서 카운트 방식 사용
+  const existingCountMap = {};
   existing.forEach(t => {
-    const k = t.date + '|' + t.amount + '|' + normStr(extractName(t.name || ''));
-    exCountMap[k] = (exCountMap[k] || 0) + 1;
+    const k = t.date + '_' + t.amount;
+    existingCountMap[k] = (existingCountMap[k] || 0) + 1;
   });
 
   csvParsed = [];
-  const csvCountMap = {};
-
-  for(let i = dataStart; i < lines.length; i++) {
-    const row     = parseCSVRow(lines[i]);
-    if(!row || row.length < 3) continue;
-
-    const rawDate  = (row[ci.date]   || '').trim();
-    const gubun    = (row[ci.gubun]  || '').trim();
-    const rawAmt   = (row[ci.amount] || '').trim().replace(/,/g,'');
-    const rawName  = (row[ci.detail] || '').trim();
-    const memo     = ci.memo !== undefined ? (row[ci.memo] || '').trim() : '';
-
+  csvParsed._csvCountMap = {};
+  for(let i=dataStart; i<lines.length; i++) {
+    const row = parseCSVRow(lines[i]);
+    if(!row || row.length < 6) continue;
+    // ,날짜,구분,금액,잔액,거래구분,내용,메모
+    const rawDate = (row[1]||'').trim();
+    const gubun   = (row[2]||'').trim(); // 입금/출금
+    const rawAmt  = (row[3]||'').trim().replace(/,/g,'').replace(/-/g,'');
+    const detail  = (row[6]||'').trim();
+    const memo    = (row[7]||'').trim();
     if(!rawDate || !gubun || !rawAmt) continue;
+
     const amount = parseInt(rawAmt);
     if(isNaN(amount) || amount === 0) continue;
 
-    const date      = rawDate.slice(0,10).split('.').join('-');
-    const cleanName = extractName(rawName);   // 순수 이름
-    const normName  = normStr(cleanName);
+    // 날짜 변환: 2026.03.09 → 2026-03-09
+    const date = rawDate.slice(0,10).replace(/\./g,'-');
+    const item  = detail || memo || '미상';
+    const key   = date + '_' + amount;
 
-    // 중복 판단: 날짜+금액+정규화이름 완전일치
-    const key = date + '|' + amount + '|' + normName;
-    csvCountMap[key] = (csvCountMap[key] || 0) + 1;
-    const isDup = (exCountMap[key] || 0) >= csvCountMap[key];
+    // 같은 날짜+금액이 기존에 몇 건인지, CSV에서 몇 번째 등장인지 비교
+    if(!csvParsed._csvCountMap) csvParsed._csvCountMap = {};
+    csvParsed._csvCountMap[key] = (csvParsed._csvCountMap[key] || 0) + 1;
+    const csvCount = csvParsed._csvCountMap[key];
+    const isDup = (existingCountMap[key] || 0) >= csvCount;
 
-    // 이름 매칭 상태
-    // exact: 정규화이름이 기존 Set에 그대로 있음
-    // fuzzy: 기존 이름이 내 이름을 포함하거나 반대 (예: 이은희↔은희)
-    let nameMatch = 'none';
-    if(!isDup) {
-      if(exNameSet.has(normName)) {
-        nameMatch = 'exact';
-      } else {
-        const fuzzy = [...exNameSet].find(en =>
-          en.length >= 2 && normName.length >= 2 &&
-          (en.includes(normName) || normName.includes(en))
-        );
-        if(fuzzy) nameMatch = 'fuzzy';
-      }
-    }
-
-    // 카테고리
-    let category = csvBank === '셀틀콕' ? '셀틀콕'
-      : csvBank === '레슨비' ? '레슨비' : '기타';
+    // 카테고리 자동 분류
+    let category = csvBank === '셔틀콕' ? '셔틀콕' : csvBank === '레슨비' ? '레슨비' : '기타';
     if(csvBank === '회비') {
       if(gubun === '입금') category = '회비';
       else {
-        const nm = (rawName + memo).toLowerCase();
+        const nm = (detail+memo).toLowerCase();
         if(nm.includes('이용료')||nm.includes('대실')) category = '이용료';
         else if(nm.includes('간식')) category = '간식비';
         else if(nm.includes('레슨')) category = '레슨비';
-        else if(nm.includes('쾐시백')) category = '쾐시백';
+        else if(nm.includes('캐시백')) category = '캐시백';
         else category = '비품';
       }
     }
 
     csvParsed.push({
-      date, amount,
-      item: cleanName,      // 정규화된 이름 (반영 시 사용)
-      rawItem: rawName,      // 원본 (표시용)
-      memo, account: csvBank,
+      date, amount, item,
+      account: csvBank,
       txType: gubun === '입금' ? 'income' : 'expense',
-      category, key, isDup, nameMatch,
-      // fuzzy: 기본값 null(미결정), true=중복처리, false=신규반영
-      fuzzyChoice: null,
-      // approved: isDup이면 false, fuzzy면 미결정(null), 나머지 true
-      get approved() {
-        if(this.isDup) return false;
-        if(this.nameMatch === 'fuzzy') return this.fuzzyChoice !== null; // false=신규반영
-        return true;
-      }
+      category,
+      memo: memo || detail,
+      key,
+      isDup,
     });
   }
+
   renderCsvResult();
-}
-
-function toggleCsvFuzzy(idx, asDup) {
-  // asDup=true → 중복처리(반영안함), false → 신규반영(반영)
-  if(csvParsed[idx]) {
-    csvParsed[idx].fuzzyChoice = asDup;
-    renderCsvResult();
-  }
-}
-
-function renderCsvResult() {
-  const card  = document.getElementById('csvResultCard');
-  const list  = document.getElementById('csvResultList');
-  const title = document.getElementById('csvResultTitle');
-  if(!csvParsed || csvParsed.length === 0) { showToast('파싱된 거래 내역이 없습니다'); return; }
-
-  const dupItems   = csvParsed.filter(r => r.isDup);
-  const newItems   = csvParsed.filter(r => !r.isDup);
-  const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
-  const normalNew  = newItems.filter(r => r.nameMatch !== 'fuzzy');
-  const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
-  const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice !== null).length;
-
-  title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건'
-    + (fuzzyItems.length ? ' / ❓이름확인 ' + fuzzyItems.length + '건' : '');
-
-  list.innerHTML = csvParsed.map((r, idx) => {
-    // 중복
-    if(r.isDup) {
-      return '<div class="csv-item skip" style="display:flex;justify-content:space-between;align-items:center;">'
-        + '<span>' + r.date + ' · ' + (r.item||r.rawItem) + '</span>'
-        + '<span>중복</span></div>';
-    }
-    // 부분일치 — 중복처리 or 신규반영 선택
-    if(r.nameMatch === 'fuzzy') {
-      const choice = r.fuzzyChoice; // null=미결, true=중복, false=신규
-      const dupActive = choice === true;
-      const newActive = choice === false;
-      return '<div style="background:rgba(244,162,97,.1);border:1px solid rgba(244,162,97,.35);border-radius:10px;padding:10px 12px;margin-bottom:6px;">'
-        + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">'
-          + '<div>'
-            + '<div style="font-size:13px;font-weight:600;color:var(--yellow);">❓ ' + r.rawItem
-              + ' → <span style="color:var(--accent);">' + r.item + '</span></div>'
-            + '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">'
-              + r.date + ' · +' + r.amount.toLocaleString() + '원 · 이름 부분일치</div>'
-          + '</div>'
-          + '<div style="font-size:11px;color:var(--text-dim);">'
-            + (choice === null ? '⚠️ 결정필요' : choice ? '무시됨' : '반영됨')
-          + '</div>'
-        + '</div>'
-        + '<div style="display:flex;gap:6px;">'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',true)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
-            + (dupActive ? 'var(--text-muted)' : 'var(--border)') + ';background:'
-            + (dupActive ? 'rgba(100,100,100,.4)' : 'rgba(255,255,255,.04)') + ';color:'
-            + (dupActive ? '#fff' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
-            + (dupActive ? '✅ ' : '') + '중복처리 (무시)'
-          + '</button>'
-          + '<button onclick="toggleCsvFuzzy(' + idx + ',false)" style="flex:1;padding:6px 0;border-radius:6px;border:1px solid '
-            + (newActive ? 'var(--green)' : 'var(--border)') + ';background:'
-            + (newActive ? 'rgba(82,183,136,.25)' : 'rgba(255,255,255,.04)') + ';color:'
-            + (newActive ? 'var(--green-bright)' : 'var(--text-muted)') + ';font-size:12px;font-weight:600;cursor:pointer;">'
-            + (newActive ? '✅ ' : '') + '신규반영'
-          + '</button>'
-        + '</div>'
-      + '</div>';
-    }
-    // 일반 신규
-    return '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;">'
-      + '<span>' + r.date + ' · ' + (r.item||r.rawItem) + '</span>'
-      + (r.amount < 0 ? '<span style="color:var(--danger)">' : '<span>+') + Math.abs(r.amount).toLocaleString() + '</span></div>';
-  }).join('');
-
-  const applyBtn = document.getElementById('csvApplyBtn');
-  if(undecided > 0) {
-    applyBtn.textContent = '⚠️ 이름확인 ' + undecided + '건 결정 후 반영하세요';
-    applyBtn.disabled = true;
-  } else {
-    const wA = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice !== null).length;
-    applyBtn.textContent = wA > 0 ? '✅ 신규 ' + wA + '건 반영하기' : '신규 항목 없음';
-    applyBtn.disabled = wA === 0;
-  }
-  card.style.display = '';
 }
 
 function parseCSVRow(line) {
@@ -3615,55 +3427,41 @@ function parseCSVRow(line) {
   return result;
 }
 
-function toggleCsvApprove(idx) {
-  if(csvParsed[idx]) {
-    csvParsed[idx].approved = !csvParsed[idx].approved;
-    renderCsvResult();
-  }
-}
-
 function renderCsvResult() {
-  const card  = document.getElementById('csvResultCard');
-  const list  = document.getElementById('csvResultList');
+  const card = document.getElementById('csvResultCard');
+  const list = document.getElementById('csvResultList');
   const title = document.getElementById('csvResultTitle');
-  if(!csvParsed || csvParsed.length === 0) { showToast('파싱된 거래 내역이 없습니다'); return; }
-
-  const newItems   = csvParsed.filter(r => !r.isDup);
-  const dupItems   = csvParsed.filter(r =>  r.isDup);
-  const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
-  const approvedItems = newItems.filter(r => r.approved);
-
-  title.textContent = '📋 파싱 결과 — 신규 ' + newItems.length + '건 / 중복 ' + dupItems.length + '건' +
-    (fuzzyItems.length ? ' / ❓확인필요 ' + fuzzyItems.length + '건' : '');
-
-  list.innerHTML = csvParsed.map((r, idx) => {
-    if(r.isDup) {
-      return '<div class="csv-item skip"><span>' + r.date + ' · ' + r.item + '</span><span>중복</span></div>';
+  if(csvParsed.length === 0) {
+    showToast('파싱된 거래 내역이 없습니다');
+    return;
+  }
+  const newItems = csvParsed.filter(r => !r.isDup);
+  const dupItems = csvParsed.filter(r => r.isDup);
+  title.textContent = `📋 파싱 결과 — 신규 ${newItems.length}건 / 중복 ${dupItems.length}건`;
+  list.innerHTML = csvParsed.map(r => {
+    // 회비 입금이면 납입월 미리 파싱해서 표시
+    let monthBadge = '';
+    if(csvBank === '회비' && r.txType === 'income' && !r.isDup) {
+      const memoText = (r.memo||'') + ' ' + (r.item||'');
+      const parsed = parseMonthsFromMemo(memoText);
+      if(parsed.length) {
+        monthBadge = ` <span style="font-size:10px;background:rgba(82,183,136,.2);color:var(--green-bright);border-radius:4px;padding:1px 5px;margin-left:4px;">${parsed.map(m=>m+'월').join(' ')}</span>`;
+      }
     }
-    if(r.nameMatch === 'fuzzy') {
-      const approved = r.approved;
-      return '<div class="csv-item" style="background:rgba(244,162,97,.12);border:1px solid rgba(244,162,97,.3);display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-radius:8px;margin-bottom:6px;">' +
-        '<div>' +
-          '<div style="font-size:13px;color:var(--yellow);font-weight:600;">❓ ' + r.rawItem + ' → <b style="color:var(--accent);">' + r.item + '</b></div>' +
-          '<div style="font-size:11px;color:var(--text-dim);margin-top:2px;">' + r.date + ' · ' + r.amount.toLocaleString() + '원 · 이름 부분일치—승인하면 반영됩니다</div>' +
-        '</div>' +
-        '<button onclick="toggleCsvApprove(' + idx + ')" style="flex-shrink:0;margin-left:8px;font-size:12px;font-weight:700;padding:5px 12px;border-radius:6px;border:none;cursor:pointer;' +
-          (approved ? 'background:var(--green);color:#fff;' : 'background:rgba(255,255,255,.08);color:var(--text-muted);') + '">' +
-          (approved ? '✅ 승인' : '승인') +
-        '</button>' +
-      '</div>';
-    }
-    // 일반 신규
-    return '<div class="csv-item new"><span>' + r.date + ' · ' + r.item + '</span><span>+' + r.amount.toLocaleString() + '</span></div>';
+    return `
+    <div class="csv-item ${r.isDup ? 'skip' : 'new'}">
+      <span>${r.date} · ${r.txType==='income'?'🟢':'🔴'} ${r.item}${monthBadge}</span>
+      <span>${r.isDup ? '중복' : (r.txType==='income'?'+':'-') + r.amount.toLocaleString()}</span>
+    </div>`;
   }).join('');
-
   const applyBtn = document.getElementById('csvApplyBtn');
-  const willApply = newItems.filter(r => r.approved).length;
-  applyBtn.textContent = willApply > 0 ? '✅ 신규 ' + willApply + '건 반영하기' : '신규 항목 없음';
-  applyBtn.disabled = willApply === 0;
+  applyBtn.textContent = newItems.length > 0 ? `✅ 신규 ${newItems.length}건 반영하기` : '신규 항목 없음';
+  applyBtn.disabled = newItems.length === 0;
   card.style.display = '';
 }
 
+// ── 메모에서 납입월 파싱 ─────────────────────
+// 패턴: 1-3회비→[1,2,3] / 3,4회비→[3,4] / 3회비→[3] / 3월→[3] / 1월회비→[1]
 function parseMonthsFromMemo(memo) {
   if(!memo) return [];
   const s = memo.replace(/\s+/g,' ');
@@ -3686,102 +3484,46 @@ function parseMonthsFromMemo(memo) {
     if(v >= 1 && v <= 12) found.add(v);
   });
 
-  // 패턴4: 숫자 단독 (메모에 "3" 또는 "03" 만 있는 경우)
-  [...s.matchAll(/(?:^|\s)(\d{1,2})(?:\s|$)/g)].forEach(m => {
-    const v = parseInt(m[1]);
-    if(v >= 1 && v <= 12) found.add(v);
-  });
-
   return [...found].sort((a,b)=>a-b).map(String);
 }
 
-// ── 이름으로 회원 찾아 납입월 업데이트 (flex 버전) ──────────
-// csvAmbiguous: 동명이인 미결 항목 [ {rawInput, months, candidates:[{id,name}]} ]
-let csvAmbiguous = [];
+// ── 이름으로 회원 찾아 납입월 업데이트 ──────────
+function applyMonthsToMember(memberName, newMonths) {
+  if(!memberName || !newMonths.length) return false;
 
-function applyMonthsToMemberFlex(memberName, newMonths) {
-  if(!memberName || !newMonths.length) return 'notfound';
-  const baseName = memberName.split(/[(（]/)[0].trim();
+  // 이름 정규화: "김용상(황안순)" 형태 처리, 앞쪽 이름으로만 매칭
+  const baseName = memberName.split(/[\(（]/)[0].trim();
   const all = getAllMembers();
-  const normBase = baseName.replace(/\s/g,'');
 
-  // 1단계: 정확 매칭
-  let target = all.find(m => m.name.replace(/\s/g,'') === normBase);
+  // 정확히 일치하는 회원 찾기 (공백 제거 후 비교)
+  const target = all.find(m => {
+    const mn = m.name.replace(/\s/g,'');
+    const bn = baseName.replace(/\s/g,'');
+    return mn === bn || mn.startsWith(bn) || bn.startsWith(mn);
+  });
+  if(!target) return false;
 
-  // 2단계: 성 제외 매칭
-  if(!target && normBase.length >= 2) {
-    const noSur = normBase.slice(1);
-    const cands = all.filter(m => {
-      const mn = m.name.replace(/\s/g,'');
-      return mn.length >= 2 && mn.slice(1) === noSur;
-    });
-    if(cands.length === 1) {
-      target = cands[0];
-    } else if(cands.length > 1) {
-      csvAmbiguous.push({ rawInput: memberName, months: newMonths,
-        candidates: cands.map(m => ({ id: m._id || m.name, name: m.name })) });
-      return 'ambiguous';
-    }
-  }
-
-  if(!target) return 'notfound';
-  return _doApplyMonths(target, newMonths) ? 'ok' : 'notfound';
-}
-
-function _doApplyMonths(target, newMonths) {
   const memberId = target._id || target.name;
   const custom   = loadCustomMembers();
   const isBase   = MEMBERS.some(m => m.name === memberId || m.name === target.name);
-  const existIdx = custom.findIndex(m => m._id === memberId);
-  const prevData = existIdx >= 0 ? custom[existIdx]
-                 : isBase ? (MEMBERS.find(m => m.name === (target._id||target.name)) || {})
-                 : {};
+
+  // 기존 months 가져오기
+  const existIdx  = custom.findIndex(m => m._id === memberId);
+  const prevData  = existIdx >= 0 ? custom[existIdx]
+                  : isBase ? (MEMBERS.find(m => m.name === (target._id||target.name)) || {})
+                  : {};
   const prevMonths = Array.isArray(prevData.months) ? [...prevData.months] : [];
+
+  // 새 달 추가 (중복 없이 병합)
   const merged = [...new Set([...prevMonths, ...newMonths])].sort((a,b)=>parseInt(a)-parseInt(b));
-  const saved  = Object.assign({}, target, { _id: memberId, months: merged });
+
+  const saved = Object.assign({}, target, { _id: memberId, months: merged });
   if(existIdx >= 0) custom[existIdx] = saved;
   else              custom.push(saved);
   saveCustomMembers(custom);
   return true;
 }
 
-// 하위 호환
-function applyMonthsToMember(memberName, newMonths) {
-  return applyMonthsToMemberFlex(memberName, newMonths) === 'ok';
-}
-
-function confirmAmbiguous(ambIdx, memberId) {
-  const item = csvAmbiguous[ambIdx];
-  if(!item) return;
-  const target = getAllMembers().find(m => (m._id || m.name) === memberId);
-  if(target) _doApplyMonths(target, item.months);
-  csvAmbiguous.splice(ambIdx, 1);
-  renderAmbiguous(); renderHome(); renderMembers();
-}
-
-function skipAmbiguous(ambIdx) {
-  csvAmbiguous.splice(ambIdx, 1);
-  renderAmbiguous();
-}
-
-function renderAmbiguous() {
-  const card = document.getElementById('ambiguousCard');
-  const list = document.getElementById('ambiguousList');
-  if(!card || !list) return;
-  if(!isAdmin || csvAmbiguous.length === 0) { card.style.display = 'none'; return; }
-  card.style.display = '';
-  list.innerHTML = csvAmbiguous.map((item, i) => `
-    <div class="amb-item">
-      <div class="amb-label"><strong>${item.rawInput}</strong>
-        <span class="amb-sub"> · ${item.months.map(m=>m+'월').join(', ')} 납부 — 아래 회원 중 누구인가요?</span>
-      </div>
-      <div class="amb-btns">
-        ${item.candidates.map(c=>`<button class="amb-btn" onclick="confirmAmbiguous(${i},'${c.id}')">${c.name}</button>`).join('')}
-        <button class="amb-btn amb-btn-skip" onclick="skipAmbiguous(${i})">건너뛰기</button>
-      </div>
-    </div>
-  `).join('');
-}
 // ══════════════════════════════════════════
 //  거래내역 수정 / 삭제
 // ══════════════════════════════════════════
@@ -3977,14 +3719,12 @@ async function saveCokReservations() {
     } catch(e) { /* 오프라인이면 로컬 기준으로 진행 */ }
 
     const now = Date.now();
-    const reserveDate = document.getElementById('cokReserveDate')?.value || today();
     const newItems = parsed.map((r, i) => ({
       id: 'cok_' + now + '_' + i,
       name: r.name,
       qty: r.qty,
       amount: r.amount,
       matched: false,
-      reserveDate: reserveDate,
       savedAt: new Date().toLocaleDateString('ko-KR'),
     }));
 
@@ -4014,93 +3754,6 @@ function clearAllCokReservations() {
   showToast('🗑️ 예약 목록 삭제됨');
 }
 
-function completeCokReservation(id) {
-  const list = loadCokReservations();
-  const idx = list.findIndex(r => r.id === id);
-  if(idx < 0) return;
-  list[idx] = { ...list[idx], matched: true };
-  saveCokReservations_store(list);
-  renderCokTab();
-  showToast('✅ 입금 완료 처리되었어요!');
-}
-
-function editCokReservation(id) {
-  const list = loadCokReservations();
-  const item = list.find(r => r.id === id);
-  if(!item) return;
-  const el = document.getElementById('cok-item-' + id);
-  if(!el) return;
-
-  // DOM API 방식으로 생성 (따옴표 충돌 없음)
-  el.innerHTML = '';
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'flex:1;min-width:0;';
-
-  const dateIn = document.createElement('input');
-  dateIn.type = 'date';
-  dateIn.id = 'ced-date-' + id;
-  dateIn.value = item.reserveDate || today();
-  dateIn.style.cssText = 'width:100%;margin-bottom:6px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12px;box-sizing:border-box;';
-  wrap.appendChild(dateIn);
-
-  const nameIn = document.createElement('input');
-  nameIn.type = 'text';
-  nameIn.id = 'ced-name-' + id;
-  nameIn.value = item.name;
-  nameIn.placeholder = '이름';
-  nameIn.style.cssText = 'width:100%;margin-bottom:4px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;box-sizing:border-box;';
-  wrap.appendChild(nameIn);
-
-  const qtyRow = document.createElement('div');
-  qtyRow.style.cssText = 'display:flex;align-items:center;gap:6px;';
-  const qtyIn = document.createElement('input');
-  qtyIn.type = 'number';
-  qtyIn.id = 'ced-qty-' + id;
-  qtyIn.value = item.qty;
-  qtyIn.min = '1';
-  qtyIn.style.cssText = 'width:70px;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:13px;';
-  const qtyLabel = document.createElement('span');
-  qtyLabel.style.cssText = 'font-size:12px;color:var(--text-muted);';
-  qtyLabel.textContent = '통';
-  qtyRow.appendChild(qtyIn);
-  qtyRow.appendChild(qtyLabel);
-  wrap.appendChild(qtyRow);
-  el.appendChild(wrap);
-
-  const btnRow = document.createElement('div');
-  btnRow.style.cssText = 'display:flex;gap:4px;margin-left:8px;flex-shrink:0;align-self:center;';
-
-  const saveBtn = document.createElement('button');
-  saveBtn.textContent = '저장';
-  saveBtn.style.cssText = 'font-size:12px;color:#fff;background:var(--green);border:none;border-radius:6px;padding:6px 12px;cursor:pointer;font-weight:600;';
-  saveBtn.onclick = () => saveCokEdit(id);
-  btnRow.appendChild(saveBtn);
-
-  const cancelBtn = document.createElement('button');
-  cancelBtn.textContent = '취소';
-  cancelBtn.style.cssText = 'font-size:12px;color:var(--text-muted);background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;';
-  cancelBtn.onclick = () => renderCokTab();
-  btnRow.appendChild(cancelBtn);
-
-  el.appendChild(btnRow);
-  el.style.cssText = 'display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:10px;background:var(--surface3);margin-bottom:6px;';
-}
-
-function saveCokEdit(id) {
-  const name = document.getElementById('ced-name-' + id)?.value.trim();
-  const qty  = parseInt(document.getElementById('ced-qty-' + id)?.value || '0');
-  const date = document.getElementById('ced-date-' + id)?.value || today();
-  if(!name || qty < 1) { showToast('이름과 수량을 확인해주세요'); return; }
-  const list = loadCokReservations();
-  const idx  = list.findIndex(r => r.id === id);
-  if(idx < 0) return;
-  list[idx] = { ...list[idx], name, qty, amount: qty * COK_PRICE, reserveDate: date };
-  saveCokReservations_store(list);
-  renderCokTab();
-  showToast('✅ 예약 정보가 수정되었어요!');
-}
-
 function deleteCokReservation(id) {
   const list = loadCokReservations().filter(r => r.id !== id);
   saveCokReservations_store(list);
@@ -4127,18 +3780,12 @@ function renderCokTab() {
   if(pending.length) {
     html += `<div style="font-size:12px;color:var(--text-muted);font-weight:600;margin-bottom:6px;">⏳ 입금 대기 (${pending.length}건)</div>`;
     html += pending.map(r => `
-      <div class="cok-reserve-item" id="cok-item-${r.id}">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">${r.reserveDate||r.savedAt||''}</div>
-          <div class="cok-name">${r.name}</div>
-        </div>
+      <div class="cok-reserve-item">
+        <div class="cok-name">${r.name}</div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
-        <div style="display:flex;gap:4px;margin-left:4px;">
-          <button onclick="editCokReservation('${r.id}')" style="font-size:11px;color:var(--green-bright);background:rgba(82,183,136,.1);border:1px solid rgba(82,183,136,.3);border-radius:6px;padding:2px 7px;cursor:pointer;">수정</button>
-          <button onclick="completeCokReservation('${r.id}')" style="font-size:11px;color:var(--accent);background:rgba(82,183,136,.2);border:1px solid var(--green);border-radius:6px;padding:2px 7px;cursor:pointer;">완료</button>
-          <button onclick="deleteCokReservation('${r.id}')" style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;">✕</button>
-        </div>
+        <button onclick="deleteCokReservation('${r.id}')"
+          style="font-size:11px;color:var(--text-dim);background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;cursor:pointer;margin-left:4px;">✕</button>
       </div>
     `).join('');
   }
@@ -4147,7 +3794,7 @@ function renderCokTab() {
     html += matched.map(r => `
       <div class="cok-reserve-item matched">
         <div class="cok-badge">완료</div>
-        <div style="flex:1;min-width:0;"><div style="font-size:10px;color:var(--text-dim);">${r.reserveDate||r.savedAt||''}</div><div class="cok-name">${r.name}</div></div>
+        <div class="cok-name">${r.name}</div>
         <div class="cok-qty">${r.qty}통</div>
         <div class="cok-amt">${r.amount.toLocaleString()}원</div>
         <button onclick="deleteCokReservation('${r.id}')"
@@ -4207,80 +3854,13 @@ function matchCokReservations(csvItems) {
 }
 
 
-function matchCokReservationsFromHoebi(csvItems) {
-  const reserves = loadCokReservations().filter(r => !r.matched);
-  if(reserves.length === 0) return csvItems;
-  const normN = s => (s||'').replace(/\s+/g,'').toLowerCase();
-  const nameFuzzy = (rName, cName) => {
-    const rn = normN(rName), cn = normN(cName);
-    return rn === cn || rn.includes(cn) || cn.includes(rn);
-  };
-  let updated = [...loadCokReservations()];
-  const usedIds = new Set();
-  let matchCount = 0;
-  const result = csvItems.map(item => {
-    if(item.txType !== 'income') return item;
-    const memoRaw = (item.memo || '').trim();
-    const itemRaw = (item.item || '').trim();
-    let qty = 0;
-    const memoNum = memoRaw.match(/^(\d+)$/);
-    if(memoNum) {
-      qty = parseInt(memoNum[1]);
-    } else {
-      const numMatch = (memoRaw + ' ' + itemRaw).match(/(\d+)/);
-      if(numMatch && item.amount > 0) {
-        const pq = parseInt(numMatch[1]);
-        if(pq * COK_PRICE === item.amount) qty = pq;
-      }
-    }
-    if(qty < 1) return item;
-    const reserve = reserves.find(r => !usedIds.has(r.id) && r.qty === qty && nameFuzzy(r.name, itemRaw))
-      || reserves.find(r => !usedIds.has(r.id) && r.qty === qty && item.amount === r.amount)
-      || reserves.find(r => !usedIds.has(r.id) && item.amount === r.amount);
-    if(reserve) {
-      usedIds.add(reserve.id);
-      const idx = updated.findIndex(r => r.id === reserve.id);
-      if(idx >= 0) updated[idx] = { ...updated[idx], matched: true };
-      matchCount++;
-    }
-    return item;
-  });
-  if(matchCount > 0) {
-    saveCokReservations_store(updated);
-    showToast('🏸 회비계좌 콜예약 ' + matchCount + '건 매칭!');
-  }
-  return result;
-}
-
 function applyCsvTransactions() {
-  let newItems = csvParsed.filter(r => {
-    if(r.isDup) return false;
-    if(r.nameMatch === 'fuzzy') return r.fuzzyChoice !== null; // false = 신규반영 선택
-    return true;
-  });
+  let newItems = csvParsed.filter(r => !r.isDup);
   if(newItems.length === 0) return;
 
-
-  // 셋틀콕/회비 콜예약 매칭
-  if(csvBank === '셋틀콕') {
+  // ── 셔틀콕 통장: 예약 자동 매칭 ──
+  if(csvBank === '셔틀콕') {
     newItems = matchCokReservations(newItems);
-  } else if(csvBank === '회비') {
-    newItems = matchCokReservationsFromHoebi(newItems);
-  }
-
-  // 이월/예금이자 감지 후 확인
-  const _iw = '이월', _yg = '예금이자';
-  const carryoverItems = newItems.filter(r => {
-    const txt = ((r.memo||'') + ' ' + (r.item||'')).toLowerCase();
-    return txt.includes(_iw) || txt.includes(_yg) || r.amount === 0;
-  });
-  if(carryoverItems.length > 0) {
-    const _nm = carryoverItems.map(r => r.item || r.memo || '미상').join('\n  - ');
-    const _ok = confirm('이월/예금이자 항목으로 감지된 내역이 있어요:\n\n  - ' + _nm + '\n\n함께 반영할까요?\n(취소 시 제외됨)');
-    if(!_ok) {
-      const skipSet = new Set(carryoverItems.map(r => r.key));
-      newItems = newItems.filter(r => !skipSet.has(r.key));
-    }
   }
   const existing = loadTx();
   const now = Date.now();
@@ -4301,40 +3881,25 @@ function applyCsvTransactions() {
   if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] CSV TX bulk 실패:', e));
 
   // ── 회비 입금 항목: 메모에서 납입월 파싱 → 회원 자동 반영 ──
-  // 지원: 단독이름, 이름+월표기, 복수이름(소은 범규 3월), 성 제외 매칭, 동명이인 관리자 확인
   let autoApplied = 0;
-  csvAmbiguous = [];
   if(csvBank === '회비') {
     newItems.forEach(r => {
       if(r.txType !== 'income') return;
-      const fullText = (r.memo || '') + ' ' + (r.item || '');
-      const parsedMonths = parseMonthsFromMemo(fullText);
+      const memoText = (r.memo || '') + ' ' + (r.item || '');
+      const parsedMonths = parseMonthsFromMemo(memoText);
       if(!parsedMonths.length) return;
 
-      // item에서 월 표기 제거 후 한글 이름 토큰 추출
-      const itemClean = (r.item || '')
-        .replace(/\d{1,2}\s*[-~]\s*\d{1,2}\s*(?:회비|월)/g, '')
-        .replace(/\d{1,2}(?:\s*,\s*\d{1,2})+\s*(?:회비|월)/g, '')
-        .replace(/(?<!\d)\d{1,2}\s*(?:회비|월)/g, '')
-        .replace(/(?:^|\s)\d{1,2}(?:\s|$)/g, ' ')
-        .replace(/\s+/g, ' ').trim();
-
-      const nameTokens = itemClean.split(/\s+/).filter(t => /^[가-힣]{2,}$/.test(t));
-      if(!nameTokens.length) return;
-
-      nameTokens.forEach(name => {
-        const res = applyMonthsToMemberFlex(name, parsedMonths);
-        if(res === 'ok') autoApplied++;
-      });
+      // item(내용)에서 회원 이름 추출: 첫 번째 단어 or 전체
+      const rawName = (r.item || '').trim();
+      const ok = applyMonthsToMember(rawName, parsedMonths);
+      if(ok) autoApplied++;
     });
   }
 
-    const ambCount = csvAmbiguous.length;
-  const msg = autoApplied > 0 || ambCount > 0
-    ? `✅ ${toAdd.length}건 반영 완료! (자동처리 ${autoApplied}명${ambCount > 0 ? ' · 확인필요 '+ambCount+'명' : ''})`
+  const msg = autoApplied > 0
+    ? `✅ ${toAdd.length}건 반영 완료! (납입월 ${autoApplied}명 자동 업데이트)`
     : `✅ ${toAdd.length}건 반영 완료!`;
   showToast(msg);
-  renderAmbiguous();
   csvParsed = [];
   document.getElementById('csvResultCard').style.display = 'none';
   renderHome();
@@ -4357,7 +3922,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   // 날짜 기본값
   document.getElementById('in-date').value = today();
   document.getElementById('ex-date').value = today();
-  const _cokDE=document.getElementById('cokReserveDate'); if(_cokDE) _cokDE.value=today();
 
   updateTabVisibility();
   initNotionData();
