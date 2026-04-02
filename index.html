@@ -2317,7 +2317,9 @@ function initAuditMonthSel() {
   const allTxs = loadTx();
   const months = [...new Set(allTxs.map(t => t.month))].sort().reverse();
   if (months.length === 0) months.push(CURRENT_MONTH);
-  sel.innerHTML = months.map(m => `<option value="${m}"${m===CURRENT_MONTH?' selected':''}>${m}</option>`).join('');
+  // 기본 선택: 데이터가 있는 가장 최근 월
+  const defaultMonth = months[0];
+  sel.innerHTML = months.map(m => `<option value="${m}"${m===defaultMonth?' selected':''}>${m}월</option>`).join('');
   sel.onchange = renderAuditPreview;
   renderAuditPreview();
 }
