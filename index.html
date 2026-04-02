@@ -3540,7 +3540,7 @@ function renderCsvResult() {
   const fuzzyItems = newItems.filter(r => r.nameMatch === 'fuzzy');
   const normalNew  = newItems.filter(r => r.nameMatch !== 'fuzzy');
   const undecided  = fuzzyItems.filter(r => r.fuzzyChoice === null).length;
-  const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
+  const willApply  = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice !== null).length;
 
   title.textContent = '📋 파싱 결과 — 신규 ' + normalNew.length + '건 / 중복 ' + dupItems.length + '건'
     + (fuzzyItems.length ? ' / ❓이름확인 ' + fuzzyItems.length + '건' : '');
@@ -3588,7 +3588,7 @@ function renderCsvResult() {
     // 일반 신규
     return '<div class="csv-item new" style="display:flex;justify-content:space-between;align-items:center;">'
       + '<span>' + r.date + ' · ' + (r.item||r.rawItem) + '</span>'
-      + '<span>+' + r.amount.toLocaleString() + '</span></div>';
+      + (r.amount < 0 ? '<span style="color:var(--danger)">' : '<span>+') + Math.abs(r.amount).toLocaleString() + '</span></div>';
   }).join('');
 
   const applyBtn = document.getElementById('csvApplyBtn');
@@ -3596,7 +3596,7 @@ function renderCsvResult() {
     applyBtn.textContent = '⚠️ 이름확인 ' + undecided + '건 결정 후 반영하세요';
     applyBtn.disabled = true;
   } else {
-    const wA = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice === false).length;
+    const wA = newItems.filter(r => r.nameMatch !== 'fuzzy' || r.fuzzyChoice !== null).length;
     applyBtn.textContent = wA > 0 ? '✅ 신규 ' + wA + '건 반영하기' : '신규 항목 없음';
     applyBtn.disabled = wA === 0;
   }
@@ -4255,7 +4255,7 @@ function matchCokReservationsFromHoebi(csvItems) {
 function applyCsvTransactions() {
   let newItems = csvParsed.filter(r => {
     if(r.isDup) return false;
-    if(r.nameMatch === 'fuzzy') return r.fuzzyChoice === false; // false = 신규반영 선택
+    if(r.nameMatch === 'fuzzy') return r.fuzzyChoice !== null; // false = 신규반영 선택
     return true;
   });
   if(newItems.length === 0) return;
