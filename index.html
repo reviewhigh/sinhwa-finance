@@ -299,9 +299,7 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(1.3); }
   }
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
+  @keyframes spin { to { transform: rotate(360deg); } }
   .deposit-alert-title { font-size: 14px; font-weight: 600; color: var(--green-glow); }
   .deposit-alert-sub { font-size: 12px; color: var(--text-muted); margin-left: auto; }
 
@@ -604,12 +602,10 @@
 </style>
 </head>
 <body>
-
-<!-- 로딩 오버레이 (첫 접속 시 Supabase 로드 중 표시) -->
 <div id="loadingOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);flex-direction:column;align-items:center;justify-content:center;gap:16px;">
   <div style="font-size:36px">🏸</div>
   <div style="width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--green-bright);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
-  <div style="font-size:13px;color:var(--text-muted);font-weight:500;">최신 데이터 불러오는 중...</div>
+  <div style="font-size:13px;color:var(--text-muted);">최신 데이터 불러오는 중...</div>
 </div>
 
 <!-- 헤더 -->
@@ -729,6 +725,7 @@
         <div class="section-title">입금 기록</div>
         <div class="section-sub">카카오톡 알림을 붙여넣거나 직접 입력</div>
       </div>
+      <select id="incomeMonthSel" onchange="onIncomeMonthChange()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;font-family:'Pretendard',sans-serif;cursor:pointer;outline:none;"></select>
     </div>
 
     <!-- 카카오 알림 파서 -->
@@ -810,7 +807,7 @@
 
     <!-- 이번달 입금 내역 -->
     <div class="card">
-      <div class="card-title">이번달 입금 내역</div>
+      <div class="card-title" id="incomeTxTitle">이번달 입금 내역</div>
       <div class="tx-list scroll-area" id="incomeTxList">
         <div class="empty-state"><div class="empty-icon">💰</div><p>아직 기록이 없어요</p></div>
       </div>
@@ -824,6 +821,7 @@
         <div class="section-title">지출 입력</div>
         <div class="section-sub">지출 내역을 기록합니다</div>
       </div>
+      <select id="expenseMonthSel" onchange="onExpenseMonthChange()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;font-family:'Pretendard',sans-serif;cursor:pointer;outline:none;"></select>
     </div>
 
     <div class="card">
@@ -880,7 +878,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title">이번달 지출 내역</div>
+      <div class="card-title" id="expenseTxTitle">이번달 지출 내역</div>
       <div class="tx-list scroll-area" id="expenseTxList">
         <div class="empty-state"><div class="empty-icon">📤</div><p>아직 기록이 없어요</p></div>
       </div>
@@ -903,9 +901,8 @@
         style="width:100%;height:110px;background:var(--surface3);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:12px;font-size:14px;line-height:1.7;resize:none;font-family:'Pretendard',sans-serif;box-sizing:border-box;"
         placeholder="예시:
 김진상 2통
-지성근2통
-박지수 1
-이민호3"></textarea>
+지성근 2통
+45통"></textarea>
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button onclick="parseCokKakao()"
           style="flex:1;background:var(--green-dark);color:#fff;border:none;border-radius:10px;padding:12px;font-size:14px;font-weight:700;cursor:pointer;">
@@ -1287,6 +1284,7 @@
         <div class="section-title">월별 리포트</div>
         <div class="section-sub" id="reportMonth"></div>
       </div>
+      <select id="reportMonthSel" onchange="onReportMonthChange()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-size:13px;font-family:'Pretendard',sans-serif;cursor:pointer;outline:none;"></select>
     </div>
 
     <div class="bank-tabs">
@@ -1429,10 +1427,7 @@ async function sbUpsert(table, data) {
   if(!r.ok) throw new Error(await r.text());
 }
 async function sbDelete(table, filter) {
-  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, {
-    method: 'DELETE',
-    headers: { ...SB_HEADERS, 'Prefer': 'return=minimal' }
-  });
+  const r = await fetch(`${SB_URL}/rest/v1/${table}?${filter}`, { method: 'DELETE', headers: SB_HEADERS });
   if(!r.ok) throw new Error(await r.text());
 }
 
@@ -1445,35 +1440,10 @@ const STORAGE_KEYS = { TX: 'sinwha_tx', BALANCE: 'sinwha_balance', TX_ORDER: 'si
 function loadTx() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEYS.TX) || '[]'); } catch { return []; }
 }
-// TX 로컬 저장만 (SB 동기화 없음 — 개별 함수 사용)
-function _saveTxLocal(arr) {
-  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
-}
-// 새 항목 1개 추가: 로컬 + SB upsert 1건
-function addTxOne(tx) {
-  const arr = loadTx();
-  arr.unshift(tx);
-  _saveTxLocal(arr);
-  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
-}
-// 항목 수정: 로컬 + SB upsert 1건
-function updateTxOne(tx) {
-  const arr = loadTx();
-  const idx = arr.findIndex(t => String(t.id) === String(tx.id));
-  if(idx >= 0) arr[idx] = tx; else arr.unshift(tx);
-  _saveTxLocal(arr);
-  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 수정 실패:', e));
-}
-// 다수 항목 한꺼번에 저장 (CSV/노션 import 전용)
-function saveTxBulk(arr) {
-  _saveTxLocal(arr);
-  if(arr.length > 0) sbUpsert('transactions', arr).catch(e => console.warn('[SB] TX bulk 실패:', e));
-}
-// 하위호환 — 기존 saveTx 호출부 중 수정/추가 혼재 케이스용
-// 단, 전체 배열 upsert는 하지 않고 로컬만 저장
-// (삭제된 항목이 다시 SB에 올라가는 문제 원천 차단)
 function saveTx(arr) {
-  _saveTxLocal(arr);
+  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(arr));
+  // Supabase 동기화 (비동기, 에러무시)
+  _syncTxToSB(arr).catch(e => console.warn('[SB] TX 동기화 실패:', e));
 }
 async function _syncTxToSB(arr) {
   if(!arr.length) return;
@@ -1491,126 +1461,83 @@ function saveBalance(obj) {
     .catch(e => console.warn('[SB] Balance 동기화 실패:', e));
 }
 
-// ── 동기화 상태 UI ─────────────────────────
+// ── 동기화 상태 인디케이터 ─────────────────
 var _isSyncing = false;
 var _autoSyncTimer = null;
 
 function setSyncStatus(state) {
-  // state: 'syncing' | 'ok' | 'error' | 'idle'
   const dot  = document.getElementById('syncDot');
   const text = document.getElementById('syncText');
   if(!dot || !text) return;
-  const styles = {
-    syncing: { bg: '#f4a261', label: '동기화 중...' },
-    ok:      { bg: '#52b788', label: '✓ 동기화됨'  },
-    error:   { bg: '#e63946', label: '오프라인'     },
-    idle:    { bg: 'var(--text-dim)', label: ''     },
-  };
-  const s = styles[state] || styles.idle;
-  dot.style.background = s.bg;
-  text.textContent = s.label;
-  if(state === 'syncing') dot.style.animation = 'pulse 1s infinite';
-  else dot.style.animation = '';
-  // ok 상태는 3초 후 idle로 복귀
-  if(state === 'ok') setTimeout(() => setSyncStatus('idle'), 3000);
+  const s = { syncing:{bg:'#f4a261',label:'동기화 중...'}, ok:{bg:'#52b788',label:'✓'}, error:{bg:'#e63946',label:'오프라인'}, idle:{bg:'var(--text-dim)',label:''} };
+  const st = s[state] || s.idle;
+  dot.style.background = st.bg;
+  dot.style.animation = state==='syncing' ? 'pulse 1s infinite' : '';
+  text.textContent = st.label;
+  if(state==='ok') setTimeout(() => setSyncStatus('idle'), 3000);
 }
 
-// ── Supabase → 로컬 전체 동기화 ───────────
-// 이제 자동으로 호출됨 (버튼 없음)
-async function syncFromSupabase(silent) {
+// ── Supabase → 로컬 전체 동기화 (자동) ────
+async function syncFromSupabase() {
   if(_isSyncing) return false;
   _isSyncing = true;
   setSyncStatus('syncing');
   try {
-    // ── 거래내역: SB = 단일 진실, 로컬 = 캐시 ──────────
-    // 설계 원칙: 동기화 시 SB를 무조건 로컬에 덮어씀
-    // 로컬→SB 업로드는 절대 하지 않음 (삭제된 항목 부활 방지)
-    const sbTxs = await sbGet('transactions', 'order=date.desc&limit=2000');
-    if(sbTxs && sbTxs.length > 0) {
-      localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(sbTxs));
+    const txs = await sbGet('transactions', 'order=date.desc&limit=2000');
+    if(txs && txs.length > 0) localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(txs));
+
+    const balRows = await sbGet('balance', 'id=eq.main');
+    if(balRows && balRows.length > 0) {
+      const b = balRows[0];
+      localStorage.setItem(STORAGE_KEYS.BALANCE, JSON.stringify({ '회비': b.hoebi||0, '레슨비': b.lessonbi||0, '셔틀콕': b.shuttlecock||0 }));
     }
 
-    // ── 잔액: TX 기준 항상 재계산 ────────────────────
-    recalcBalance();
-
-    // ── 회원 커스텀 데이터: SB 항상 우선 ────────────
-    const memRows  = await sbGet('members', 'id=neq.__tx_order__');
-    const localMems = (() => { try { return JSON.parse(localStorage.getItem('sinwha_members_v2')||'[]'); } catch { return []; } })();
+    const memRows = await sbGet('members', 'id=not.like.__tx_order__');
     if(memRows && memRows.length > 0) {
-      const sbMems = memRows.map(r => r.data).filter(Boolean);
-      if(sbMems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(sbMems));
-    } else if(localMems.length > 0) {
-      _syncMembersToSB(localMems).catch(e => console.warn('[SB] Members 초기업로드 실패:', e));
+      const mems = memRows.map(r => r.data).filter(Boolean);
+      if(mems.length > 0) localStorage.setItem('sinwha_members_v2', JSON.stringify(mems));
     }
 
-    // ── 셔틀콕 예약: 마커 기반 양방향 ───────────────
-    const cokRows  = await sbGet('cok_reservations', '');
-    const localCoks = loadCokReservations();
+    const cokRows = await sbGet('cok_reservations', '');
     if(cokRows && cokRows.length > 0) {
-      const hasCleared = cokRows.some(r => r.id === '__cok_cleared__');
-      if(hasCleared) {
-        localStorage.setItem('sinwha_cok_reservations', JSON.stringify([]));
-      } else {
-        const sbCoks = cokRows.map(r => r.data).filter(Boolean);
-        if(sbCoks.length > 0) localStorage.setItem('sinwha_cok_reservations', JSON.stringify(sbCoks));
-      }
-    } else if(localCoks.length > 0) {
-      _syncCokToSB(localCoks).catch(e => console.warn('[SB] Cok 초기업로드 실패:', e));
+      localStorage.setItem('sinwha_cok_reservations', JSON.stringify(cokRows.map(r => r.data).filter(Boolean)));
     }
 
-    // ── TX 순서: SB 우선 ─────────────────────────────
     try {
       const orderRows = await sbGet('members', 'id=eq.__tx_order__');
-      if(orderRows && orderRows.length > 0 && orderRows[0].data) {
-        localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(orderRows[0].data));
-      }
-    } catch(e) { /* TX 순서는 없어도 됨 */ }
+      if(orderRows && orderRows.length > 0 && orderRows[0].data) localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(orderRows[0].data));
+    } catch(e) {}
 
     setSyncStatus('ok');
     _isSyncing = false;
-
-    // 현재 화면 리렌더
+    // 현재 보이는 탭 조용히 리렌더
     renderHome();
-    const activeId = document.querySelector('.section.active')?.id;
-    if(activeId === 'sec-report')  renderReport(reportBank);
-    if(activeId === 'sec-members') renderMembers();
-    if(activeId === 'sec-income')  renderIncomeTx();
-    if(activeId === 'sec-expense') renderExpenseTx();
-    if(activeId === 'sec-assoc')   renderAssoc();
-    if(activeId === 'sec-cok')     renderCokTab();
+    const aid = document.querySelector('.section.active')?.id;
+    if(aid==='sec-report')  renderReport(reportBank);
+    if(aid==='sec-income')  { buildMonthOptions('incomeMonthSel', incomeSelectedMonth); renderIncomeTx(); }
+    if(aid==='sec-expense') { buildMonthOptions('expenseMonthSel', expenseSelectedMonth); renderExpenseTx(); }
+    if(aid==='sec-members') renderMembers();
+    if(aid==='sec-assoc')   renderAssoc();
     return true;
-
   } catch(e) {
-    console.warn('[SB] 동기화 실패 (오프라인?):', e);
+    console.warn('[SB] 동기화 실패:', e);
     setSyncStatus('error');
     _isSyncing = false;
-    // 실패해도 로컬 데이터로 화면 표시
-    renderHome();
-    const activeId2 = document.querySelector('.section.active')?.id;
-    if(activeId2 === 'sec-report')  renderReport(reportBank);
-    if(activeId2 === 'sec-members') renderMembers();
-    if(activeId2 === 'sec-income')  renderIncomeTx();
-    if(activeId2 === 'sec-expense') renderExpenseTx();
-    if(activeId2 === 'sec-assoc')   renderAssoc();
-    if(activeId2 === 'sec-cok')     renderCokTab();
     return false;
   }
 }
 
-// ── 30초마다 자동 백그라운드 동기화 ────────
+// ── 30초 자동 동기화 ───────────────────────
 function startAutoSync() {
   if(_autoSyncTimer) clearInterval(_autoSyncTimer);
-  _autoSyncTimer = setInterval(() => {
-    if(!_isSyncing) syncFromSupabase(true);
+  _autoSyncTimer = setInterval(function() {
+    if(!_isSyncing) syncFromSupabase();
   }, 30000);
 }
 
 // ── 탭 복귀 시 즉시 동기화 ─────────────────
-// (다른 기기에서 입력 후 이 기기로 돌아오면 바로 반영)
-document.addEventListener('visibilitychange', () => {
-  if(document.visibilityState === 'visible' && !_isSyncing) {
-    syncFromSupabase(true);
-  }
+document.addEventListener('visibilitychange', function() {
+  if(document.visibilityState === 'visible' && !_isSyncing) syncFromSupabase();
 });
 
 // ══════════════════════════════════════════
@@ -1743,15 +1670,26 @@ const NOTION_TRANSACTIONS = [
 ];
 
 const CURRENT_MONTH = String(new Date().getMonth() + 1);
-const CURRENT_YEAR  = String(new Date().getFullYear());
 
-// date("2026-03-12") 또는 month 필드로 이번달 여부 판단
-function isThisMonth(t) {
-  if(t.date) {
-    const d = new Date(t.date);
-    return String(d.getMonth()+1) === CURRENT_MONTH && String(d.getFullYear()) === CURRENT_YEAR;
-  }
-  return t.month === CURRENT_MONTH;
+// 탭별 선택 월 (드롭다운 연동)
+var reportSelectedMonth = CURRENT_MONTH;
+var incomeSelectedMonth = CURRENT_MONTH;
+var expenseSelectedMonth = CURRENT_MONTH;
+
+// ── 월 드롭다운 공통 초기화 함수 ─────────────
+function buildMonthOptions(selId, selectedMonth) {
+  const sel = document.getElementById(selId);
+  if(!sel) return;
+  const txs = loadTx();
+  // 데이터에 있는 월 목록 추출 (내림차순)
+  const months = [...new Set(txs.map(t => t.month))].sort((a,b) => Number(b)-Number(a));
+  // 현재 월이 데이터에 없어도 항상 포함
+  if(!months.includes(CURRENT_MONTH)) months.unshift(CURRENT_MONTH);
+  sel.innerHTML = months.map(m => {
+    const label = m + '월';
+    const selected = m === selectedMonth ? ' selected' : '';
+    return '<option value="' + m + '"' + selected + '>' + label + '</option>';
+  }).join('');
 }
 
 // ══════════════════════════════════════════
@@ -1769,10 +1707,10 @@ function switchTab(tab) {
   const tabEl = document.getElementById('tab-' + tab);
   if(tabEl) tabEl.classList.add('active');
   if(tab==='members') renderMembers();
-  if(tab==='report') renderReport('전체');
+  if(tab==='report') { buildMonthOptions('reportMonthSel', reportSelectedMonth); renderReport(reportBank); }
   if(tab==='home') renderHome();
-  if(tab==='income') renderIncomeTx();
-  if(tab==='expense') renderExpenseTx();
+  if(tab==='income') { buildMonthOptions('incomeMonthSel', incomeSelectedMonth); renderIncomeTx(); }
+  if(tab==='expense') { buildMonthOptions('expenseMonthSel', expenseSelectedMonth); renderExpenseTx(); }
   if(tab==='assoc') renderAssoc();
   if(tab==='csv') renderCsvTab();
   if(tab==='cok') renderCokTab();
@@ -1814,8 +1752,7 @@ function initNotionData() {
   if(toAdd.length > 0) {
     const merged = [...toAdd, ...existing];
     merged.sort((a,b) => new Date(b.date) - new Date(a.date));
-    _saveTxLocal(merged);
-    if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] Notion TX bulk 실패:', e));
+    saveTx(merged);
 
     // 잔액 재계산
     const bal = { 회비: 0, 레슨비: 0, 셔틀콕: 0 };
@@ -1984,8 +1921,7 @@ function recordFromKakao(name, amount, bank, cat) {
   };
   const txs = loadTx();
   txs.unshift(tx);
-  _saveTxLocal(txs);
-  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
+  saveTx(txs);
 
   // 잔액 업데이트
   const bal = loadBalance();
@@ -2020,8 +1956,7 @@ function addTransaction(type) {
   };
   const txs = loadTx();
   txs.unshift(tx);
-  _saveTxLocal(txs);
-  sbUpsert('transactions', [tx]).catch(e => console.warn('[SB] TX 추가 실패:', e));
+  saveTx(txs);
 
   // 잔액
   const bal = loadBalance();
@@ -2117,18 +2052,22 @@ function renderTxItem(t, showOrder, idx, total, showEdit) {
 }
 
 function renderIncomeTx() {
-  const txs = loadTx().filter(t => t.type==='income' && isThisMonth(t));
+  const txs = loadTx().filter(t => t.type==='income' && t.month===incomeSelectedMonth);
   const el = document.getElementById('incomeTxList');
+  const titleEl = document.getElementById('incomeTxTitle');
+  if(titleEl) titleEl.textContent = incomeSelectedMonth + '월 입금 내역';
   el.innerHTML = txs.length === 0
-    ? '<div class="empty-state"><div class="empty-icon">💰</div><p>아직 기록이 없어요</p></div>'
+    ? '<div class="empty-state"><div class="empty-icon">💰</div><p>기록이 없어요</p></div>'
     : txs.map(t => renderTxItem(t, false, undefined, undefined, true)).join('');
 }
 
 function renderExpenseTx() {
-  const txs = loadTx().filter(t => t.type==='expense' && isThisMonth(t));
+  const txs = loadTx().filter(t => t.type==='expense' && t.month===expenseSelectedMonth);
   const el = document.getElementById('expenseTxList');
+  const titleEl = document.getElementById('expenseTxTitle');
+  if(titleEl) titleEl.textContent = expenseSelectedMonth + '월 지출 내역';
   el.innerHTML = txs.length === 0
-    ? '<div class="empty-state"><div class="empty-icon">📤</div><p>아직 기록이 없어요</p></div>'
+    ? '<div class="empty-state"><div class="empty-icon">📤</div><p>기록이 없어요</p></div>'
     : txs.map(t => renderTxItem(t, false, undefined, undefined, true)).join('');
 }
 
@@ -2197,6 +2136,22 @@ function renderMembers() {
 }
 function setMemberFilter(f) { memberFilter = f; renderMembers(); }
 
+function onReportMonthChange() {
+  var sel = document.getElementById('reportMonthSel');
+  if(sel) reportSelectedMonth = sel.value;
+  renderReport(reportBank);
+}
+function onIncomeMonthChange() {
+  var sel = document.getElementById('incomeMonthSel');
+  if(sel) incomeSelectedMonth = sel.value;
+  renderIncomeTx();
+}
+function onExpenseMonthChange() {
+  var sel = document.getElementById('expenseMonthSel');
+  if(sel) expenseSelectedMonth = sel.value;
+  renderExpenseTx();
+}
+
 function selectReportBank(bank, btn) {
   reportBank = bank;
   document.querySelectorAll('.bank-tab').forEach(b => b.classList.remove('active'));
@@ -2205,9 +2160,10 @@ function selectReportBank(bank, btn) {
 }
 function renderReport(bank) {
   const now = new Date();
-  document.getElementById('reportMonth').textContent = `${now.getFullYear()}년 ${now.getMonth()+1}월`;
+  const month = reportSelectedMonth;
+  document.getElementById('reportMonth').textContent = `${now.getFullYear()}년 ${month}월`;
 
-  let txs = loadTx().filter(t => isThisMonth(t));
+  let txs = loadTx().filter(t => t.month === month);
   if(bank !== '전체') txs = txs.filter(t => t.bank === bank);
 
   const totalIncome = txs.filter(t=>t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0);
@@ -2217,7 +2173,7 @@ function renderReport(bank) {
   document.getElementById('rep-expense').textContent = fmtMoney(totalExpense);
 
   // 통장별 이월 잔액
-  const allTxs = loadTx().filter(t => isThisMonth(t));
+  const allTxs = loadTx().filter(t => t.month === month);
   const banks = bank === '전체' ? ['회비','레슨비','셔틀콕'] : [bank];
   const bankEmoji = { 회비:'💳', 레슨비:'🏋️', 셔틀콕:'🏸' };
   const carryoverEl = document.getElementById('reportCarryoverList');
@@ -2278,9 +2234,6 @@ function loadTxOrder() {
 }
 function saveTxOrder(arr) {
   localStorage.setItem(STORAGE_KEYS.TX_ORDER, JSON.stringify(arr));
-  // SB members 테이블에 특수 키로 저장
-  sbUpsert('members', [{ id: '__tx_order__', data: arr }])
-    .catch(e => console.warn('[SB] TX순서 동기화 실패:', e));
 }
 
 // 저장된 순서 적용 (없으면 날짜순 기본)
@@ -2299,7 +2252,7 @@ function applySavedOrder(txs) {
 
 // ▲▼ 버튼: 항목 한 칸씩 이동
 function moveTxOrder(txId, dir) {
-  const txs = loadTx().filter(t => isThisMonth(t));
+  const txs = loadTx().filter(t => t.month === reportSelectedMonth);
   let sorted = applySavedOrder(txs);
   const cur = sorted.findIndex(t => t.id === txId);
   if(cur < 0) return;
@@ -2314,7 +2267,6 @@ function moveTxOrder(txId, dir) {
 // 순서 초기화 (날짜순으로 되돌리기)
 function resetTxOrder() {
   localStorage.removeItem(STORAGE_KEYS.TX_ORDER);
-  sbDelete('members', 'id=eq.__tx_order__').catch(e => console.warn('[SB] TX순서 삭제 실패:', e));
   showToast('순서가 날짜순으로 초기화됐어요');
   renderReport(document.querySelector('.report-bank-tab.active')?.dataset.bank || '전체');
 }
@@ -2729,10 +2681,7 @@ ${JSON.stringify(toSyncData, null, 2)}`;
     logBox.innerHTML = `<span style="color:#4caf50">✅ ${toSyncData.length}건 복사 완료!</span><br><span style="color:#aaa;font-size:11px">Claude 채팅창에 붙여넣기(Ctrl+V)하면 노션에 자동 기록됩니다.</span>`;
     // 동기화된 것으로 표시
     const ids = new Set(toSync.map(t=>t.id));
-    const taggedArr = allTxs.map(t => ids.has(t.id) ? {...t, source:'notion'} : t);
-    _saveTxLocal(taggedArr);
-    const taggedOnly = taggedArr.filter(t => ids.has(t.id));
-    if(taggedOnly.length > 0) sbUpsert('transactions', taggedOnly).catch(e => console.warn('[SB] 노션태깅 실패:', e));
+    saveTx(allTxs.map(t => ids.has(t.id) ? {...t, source:'notion'} : t));
     document.getElementById('notionSyncBtnText').textContent = `✅ ${toSyncData.length}건 복사됨`;
     setTimeout(() => {
       document.getElementById('notionSyncBtnText').textContent = '거래내역 복사';
@@ -2823,18 +2772,13 @@ function loadCustomMembers() {
 }
 function saveCustomMembers(arr) {
   localStorage.setItem(MEMBERS_KEY, JSON.stringify(arr));
-  // Supabase 동기화 (_deleted 항목은 SB에서 실제 삭제 포함)
+  // Supabase 동기화
   _syncMembersToSB(arr).catch(e => console.warn('[SB] Members 동기화 실패:', e));
 }
 async function _syncMembersToSB(arr) {
-  // _deleted:true 항목 → SB에서 실제 삭제
-  const toDelete = arr.filter(m => m._deleted === true);
-  const toUpsert = arr.filter(m => !m._deleted);
-
-  for(const m of toDelete) {
-    await sbDelete('members', `id=eq.${encodeURIComponent(String(m._id))}`).catch(() => {});
-  }
-  const rows = toUpsert.map(m => ({ id: String(m._id), data: m }));
+  // 기존 전체 삭제 후 재삽입 (단순전략)
+  // members 테이블: id=회원_id, data=JSON
+  const rows = arr.map(m => ({ id: String(m._id), data: m }));
   if(rows.length > 0) await sbUpsert('members', rows);
 }
 
@@ -3572,8 +3516,7 @@ function saveTxEdit() {
     month: String(parseInt(date.slice(5,7))),
   };
   allTxs[idx] = updated;
-  _saveTxLocal(allTxs);
-  sbUpsert('transactions', [updated]).catch(e => console.warn('[SB] TX 수정 실패:', e));
+  saveTx(allTxs);
 
   // 잔액 재계산
   recalcBalance();
@@ -3585,23 +3528,17 @@ function saveTxEdit() {
   renderHome();
 }
 
-async function deleteTx(id) {
+function deleteTx(id) {
   if(!confirm('이 항목을 삭제할까요?')) return;
-  // 1) 로컬에서 즉시 제거 + 잔액 반영
   const allTxs = loadTx().filter(t => String(t.id) !== String(id));
-  localStorage.setItem(STORAGE_KEYS.TX, JSON.stringify(allTxs));
+  saveTx(allTxs);
+  // Supabase에서도 삭제
+  sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('[SB] TX 삭제 실패:', e));
   recalcBalance();
+  showToast('🗑️ 삭제 완료');
   renderIncomeTx();
   renderExpenseTx();
   renderHome();
-  showToast('🗑️ 삭제 완료');
-  // 2) SB에서도 삭제 (await — 완료 보장)
-  try {
-    await sbDelete('transactions', `id=eq.${encodeURIComponent(String(id))}`);
-  } catch(e) {
-    console.warn('[SB] TX SB삭제 실패:', e);
-    showToast('⚠️ 서버 삭제 실패. 다시 시도해주세요.');
-  }
 }
 
 function recalcBalance() {
@@ -3628,35 +3565,27 @@ function saveCokReservations_store(arr) {
   _syncCokToSB(arr).catch(e => console.warn('[SB] Cok 동기화 실패:', e));
 }
 async function _syncCokToSB(arr) {
-  if(arr.length === 0) {
-    // 의도적 전체삭제 → 마커 저장 (다른 기기에서 삭제 인식)
-    await sbUpsert('cok_reservations', [{ id: '__cok_cleared__', data: { cleared_at: new Date().toISOString() } }]);
-  } else {
-    // 데이터 있음 → 마커 제거 후 업서트
-    try { await sbDelete('cok_reservations', 'id=eq.__cok_cleared__'); } catch(e) {}
-    const rows = arr.map(c => ({ id: String(c.id), data: c }));
-    await sbUpsert('cok_reservations', rows);
-  }
+  const rows = arr.map(c => ({ id: String(c.id), data: c }));
+  if(rows.length > 0) await sbUpsert('cok_reservations', rows);
 }
 
-// 카톡 텍스트 파싱
-// 지원 형식: "이름 2통" / "이름2통" / "이름 2" / "이름2" (띄어쓰기·통 선택)
+// 카톡 텍스트 파싱: "김진상 2통\n지성근 2통\n45통" → [{name, qty}]
 function parseCokText(text) {
   const lines = text.trim().split(/\n/);
   const results = [];
   lines.forEach(line => {
     line = line.trim();
     if(!line) return;
-    // 패턴: 이름(한글/영문/공백포함) + 숫자 + 통(선택)
-    // 숫자만 있는 줄(잔여 합계)은 제외
-    if(/^\d+통?$/.test(line)) return;
-    const m = line.match(/^(.+?)\s*(\d+)\s*통?$/);
+    // "이름 N통" 패턴
+    const m = line.match(/^(.+?)\s+(\d+)\s*통$/);
     if(m) {
       const name = m[1].trim();
       const qty  = parseInt(m[2]);
-      if(!name || /^\d+$/.test(name) || qty < 1) return;
+      // 숫자만 있는 줄 (잔여 합계) 제외
+      if(/^\d+$/.test(name)) return;
       results.push({ name, qty, amount: qty * COK_PRICE });
     }
+    // 숫자만 있는 줄 → 잔여 합계, 무시
   });
   return results;
 }
@@ -3693,52 +3622,30 @@ function parseCokKakao() {
   saveBtn._parsed = parsed;
 }
 
-async function saveCokReservations() {
+function saveCokReservations() {
   const btn = document.getElementById('cokSaveBtn');
   const parsed = btn._parsed;
   if(!parsed || !parsed.length) return;
 
-  btn.disabled = true;
-  btn.textContent = '저장 중...';
+  const existing = loadCokReservations();
+  const now = Date.now();
+  const newItems = parsed.map((r, i) => ({
+    id: 'cok_' + now + '_' + i,
+    name: r.name,
+    qty: r.qty,
+    amount: r.amount,
+    matched: false,
+    savedAt: new Date().toLocaleDateString('ko-KR'),
+  }));
 
-  try {
-    // SB 최신 목록 먼저 가져와서 병합 (동기화 안 된 상태에서도 기존 데이터 보존)
-    let existing = loadCokReservations();
-    try {
-      const sbRows = await sbGet('cok_reservations', '');
-      if(sbRows && sbRows.length > 0 && !sbRows.some(r => r.id === '__cok_cleared__')) {
-        const sbCoks = sbRows.map(r => r.data).filter(Boolean);
-        if(sbCoks.length > 0) {
-          // SB 항목과 로컬 항목 병합 (ID 기준 중복 제거, SB 우선)
-          const sbIds = new Set(sbCoks.map(c => c.id));
-          const localOnly = existing.filter(c => !sbIds.has(c.id));
-          existing = [...sbCoks, ...localOnly];
-          localStorage.setItem(COK_RESERVE_KEY, JSON.stringify(existing));
-        }
-      }
-    } catch(e) { /* 오프라인이면 로컬 기준으로 진행 */ }
+  saveCokReservations_store([...existing, ...newItems]);
+  showToast(`✅ ${newItems.length}건 예약 저장 완료!`);
 
-    const now = Date.now();
-    const newItems = parsed.map((r, i) => ({
-      id: 'cok_' + now + '_' + i,
-      name: r.name,
-      qty: r.qty,
-      amount: r.amount,
-      matched: false,
-      savedAt: new Date().toLocaleDateString('ko-KR'),
-    }));
-
-    saveCokReservations_store([...existing, ...newItems]);
-    showToast(`✅ ${newItems.length}건 예약 저장 완료!`);
-
-    // 입력창 초기화
-    document.getElementById('cokKakaoPaste').value = '';
-    document.getElementById('cokParsePreview').style.display = 'none';
-    btn.style.display = 'none';
-    renderCokTab();
-  } finally {
-    btn.disabled = false;
-  }
+  // 입력창 초기화
+  document.getElementById('cokKakaoPaste').value = '';
+  document.getElementById('cokParsePreview').style.display = 'none';
+  btn.style.display = 'none';
+  renderCokTab();
 }
 
 function clearCokInput() {
@@ -3757,9 +3664,6 @@ function clearAllCokReservations() {
 function deleteCokReservation(id) {
   const list = loadCokReservations().filter(r => r.id !== id);
   saveCokReservations_store(list);
-  // SB에서도 해당 row 삭제 (없으면 무시)
-  sbDelete('cok_reservations', `id=eq.${encodeURIComponent(String(id))}`)
-    .catch(e => console.warn('[SB] Cok 개별삭제 실패:', e));
   renderCokTab();
 }
 
@@ -3876,9 +3780,7 @@ function applyCsvTransactions() {
     memo: r.memo || '',
     source: 'csv',
   }));
-  const merged = [...existing, ...toAdd];
-  _saveTxLocal(merged);
-  if(toAdd.length > 0) sbUpsert('transactions', toAdd).catch(e => console.warn('[SB] CSV TX bulk 실패:', e));
+  saveTx([...existing, ...toAdd]);
 
   // ── 회비 입금 항목: 메모에서 납입월 파싱 → 회원 자동 반영 ──
   let autoApplied = 0;
@@ -3910,7 +3812,7 @@ function applyCsvTransactions() {
 // ══════════════════════════════════════════
 //  초기화
 // ══════════════════════════════════════════
-window.addEventListener('DOMContentLoaded', async () => {
+window.addEventListener('DOMContentLoaded', () => {
   // 오늘 날짜
   const now = new Date();
   const wd = ['일','월','화','수','목','금','토'][now.getDay()];
@@ -3925,24 +3827,30 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   updateTabVisibility();
   initNotionData();
-  renderHome(); // 로컬 캐시로 일단 표시
 
-  // ── 최초 Supabase 로드 (로딩 오버레이 표시) ──
-  const overlay = document.getElementById('loadingOverlay');
-  const hideOverlay = () => {
-    if(!overlay) return;
-    overlay.style.opacity = '0';
-    overlay.style.transition = 'opacity 0.4s';
-    setTimeout(() => { overlay.style.display = 'none'; }, 420);
-  };
-  if(overlay) {
-    overlay.style.display = 'flex';
-    try { await syncFromSupabase(); } catch(e) { /* 오프라인이어도 계속 */ } finally { hideOverlay(); }
-  } else {
-    await syncFromSupabase();
+  // 드롭다운 초기값: 데이터에 있는 가장 최근 월로 설정
+  const allTxs = loadTx();
+  const months = [...new Set(allTxs.map(t => t.month))].sort((a,b) => Number(b)-Number(a));
+  if(months.length > 0) {
+    reportSelectedMonth  = months[0];
+    incomeSelectedMonth  = months[0];
+    expenseSelectedMonth = months[0];
   }
 
-  // ── 30초마다 자동 동기화 시작 ──
+  renderHome();
+
+  // 첫 로딩 오버레이 표시 후 Supabase 동기화
+  const overlay = document.getElementById('loadingOverlay');
+  if(overlay) overlay.style.display = 'flex';
+  syncFromSupabase().then(function() {
+    // 동기화 완료 후 드롭다운 다시 초기화 (새 데이터 반영)
+    const txs2 = loadTx();
+    const m2 = [...new Set(txs2.map(t => t.month))].sort((a,b) => Number(b)-Number(a));
+    if(m2.length > 0) { reportSelectedMonth = m2[0]; incomeSelectedMonth = m2[0]; expenseSelectedMonth = m2[0]; }
+    if(overlay) { overlay.style.opacity='0'; overlay.style.transition='opacity 0.3s'; setTimeout(function(){ overlay.style.display='none'; }, 320); }
+  });
+
+  // 30초 자동 동기화 시작
   startAutoSync();
 });
 </script>
