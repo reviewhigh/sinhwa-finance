@@ -702,7 +702,7 @@
 
     <!-- 미납 현황 -->
     <div class="card" id="unpaidCard">
-      <div class="card-title">⚠️ 이번달 미납 현황</div>
+      <div class="card-title" id="unpaidCardTitle">⚠️ 이번달 미납 현황</div>
       <div id="unpaidList"></div>
     </div>
 
@@ -1555,7 +1555,6 @@ const MEMBERS = [
   { name: '성도영',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '경기',  협회비: false, gender: '남', ageGroup: '20~30', cityRank: 'D', districtRank: 'D', birth: '1995-12-06', joinDate: '', phone: '010-2553-5096' },
   { name: '김현혜',       type: '정회원',      fee: 25000, months: ['3'],                     amount: 25000, role: '홍보',  협회비: false, gender: '여', ageGroup: '40', cityRank: 'D', districtRank: 'D', birth: '1989-10-30', joinDate: '', phone: '010-5878-2412' },
   { name: '김형묵',       type: '정회원',      fee: 25000, months: ['1','2','3','4'],         amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '60', cityRank: 'C', districtRank: 'D', birth: '1965-07-19', joinDate: '', phone: '010-6418-1133' },
-  { name: '이보미',       type: '정회원',      fee: 25000, months: ['2'],                     amount: 25000, role: '',      협회비: false, gender: '여', ageGroup: '20~30', cityRank: '초심', districtRank: '초심', birth: '1998-05-06', joinDate: '2026-01-28', phone: '010-9794-9234' },
   { name: '김태동',       type: '정회원',      fee: 25000, months: ['2','3','4','5','6'],     amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '', cityRank: '', districtRank: '', birth: '', joinDate: '', phone: '' },
   { name: '노충호',       type: '정회원',      fee: 25000, months: ['1','2'],                 amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1966-12-24', joinDate: '', phone: '010-4661-9465', note: '매월25입금' },
   { name: '노재술',       type: '정회원',      fee: 25000, months: [],                       amount: 25000, role: '',      협회비: false, gender: '남', ageGroup: '55', cityRank: 'D', districtRank: 'D', birth: '1968-05-25', joinDate: '', phone: '010-5855-6006', note: '군무원' },
@@ -1742,7 +1741,7 @@ function initNotionData() {
       bank: n.account,
       cat: n.category,
       name: n.item,
-      memo: n.detail || (n.type === '이월' ? '이월' : ''),
+      memo: (n.type === '이월') ? '이월' : (n.detail || ''),
       amount: n.amount,
       type: txType,
       source: 'notion'
@@ -1970,9 +1969,19 @@ function addTransaction(type) {
   document.getElementById(`${pre}-memo`).value = '';
 
   showToast(type === 'income' ? '💰 수입 기록 완료!' : '📤 지출 기록 완료!');
+
+  // 입력한 거래의 월로 드롭다운 전환
+  const txMonth = String(new Date(date).getMonth() + 1);
+  if(type === 'income') {
+    incomeSelectedMonth = txMonth;
+    buildMonthOptions('incomeMonthSel', txMonth);
+    renderIncomeTx();
+  } else {
+    expenseSelectedMonth = txMonth;
+    buildMonthOptions('expenseMonthSel', txMonth);
+    renderExpenseTx();
+  }
   renderHome();
-  if(type === 'income') renderIncomeTx();
-  else renderExpenseTx();
 }
 
 // ══════════════════════════════════════════
@@ -1986,12 +1995,14 @@ function renderHome() {
 
   // 미납 (현재월 납부 안된 정회원/가족회원)
   const unpaid = getAllMembers().filter(m =>
-    ['정회원','가족회원','연간 정회원'].includes(m.type) &&
+    ['정회원','가족회원'].includes(m.type) &&
     !m.months.includes(CURRENT_MONTH) &&
-    !m.months.includes('연납') &&
     !m.months.includes('면제') &&
     m.amount > 0
   );
+  // 미납 카드 제목에 현재 월 표시
+  const unpaidTitle = document.getElementById('unpaidCardTitle');
+  if(unpaidTitle) unpaidTitle.textContent = `⚠️ ${CURRENT_MONTH}월 미납 현황`;
   const unpaidEl = document.getElementById('unpaidList');
   if(unpaid.length === 0) {
     unpaidEl.innerHTML = '<div style="font-size:13px;color:var(--green-bright);padding:8px 0;">✅ 이번달 미납자 없음</div>';
@@ -2154,7 +2165,8 @@ function onExpenseMonthChange() {
 
 function selectReportBank(bank, btn) {
   reportBank = bank;
-  document.querySelectorAll('.bank-tab').forEach(b => b.classList.remove('active'));
+  // report 탭 내 버튼만 초기화 (CSV 탭 active 상태 영향 없도록)
+  document.querySelectorAll('.report-bank-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   renderReport(bank);
 }
@@ -2166,7 +2178,7 @@ function renderReport(bank) {
   let txs = loadTx().filter(t => t.month === month);
   if(bank !== '전체') txs = txs.filter(t => t.bank === bank);
 
-  const totalIncome = txs.filter(t=>t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0);
+  const totalIncome = txs.filter(t=>t.type==='income'&&t.memo!=='이월'&&!(t.name&&t.name.includes('이월'))).reduce((s,t)=>s+t.amount,0);
   const totalExpense = txs.filter(t=>t.type==='expense').reduce((s,t)=>s+t.amount,0);
 
   document.getElementById('rep-income').textContent = fmtMoney(totalIncome);
@@ -2178,7 +2190,7 @@ function renderReport(bank) {
   const bankEmoji = { 회비:'💳', 레슨비:'🏋️', 셔틀콕:'🏸' };
   const carryoverEl = document.getElementById('reportCarryoverList');
   carryoverEl.innerHTML = banks.map(b => {
-    const carryover = allTxs.filter(t=>t.bank===b&&t.memo==='이월').reduce((s,t)=>s+t.amount,0);
+    const carryover = allTxs.filter(t=>t.bank===b&&(t.memo==='이월'||(t.name&&t.name.includes('이월')))).reduce((s,t)=>s+t.amount,0);
     const income = allTxs.filter(t=>t.bank===b&&t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0);
     const expense = allTxs.filter(t=>t.bank===b&&t.type==='expense').reduce((s,t)=>s+t.amount,0);
     const balance = carryover + income - expense;
@@ -2331,7 +2343,7 @@ function getAuditData(month) {
   const bankResult = {};
   ['회비','셔틀콕','레슨비'].forEach(b => {
     const btxs = allTxs.filter(t => t.bank === b);
-    const carryover = btxs.filter(t => t.memo === '이월').reduce((s,t) => s+t.amount, 0);
+    const carryover = btxs.filter(t => t.memo === '이월' || (t.name && t.name.includes('이월') && t.memo !== '')).reduce((s,t) => s+t.amount, 0);
     const income    = btxs.filter(t => t.type === 'income' && t.memo !== '이월').reduce((s,t) => s+t.amount, 0);
     const expense   = btxs.filter(t => t.type === 'expense').reduce((s,t) => s+t.amount, 0);
     bankResult[b] = { carryover, income, expense, balance: carryover + income - expense };
@@ -2342,7 +2354,7 @@ function getAuditData(month) {
   const detailExpense = {};
   AUDIT_DETAIL_ROWS.forEach(r => { detailIncome[r] = 0; detailExpense[r] = 0; });
 
-  allTxs.filter(t => t.memo !== '이월').forEach(t => {
+  allTxs.filter(t => t.memo !== '이월' && !(t.name && t.name.includes('이월'))).forEach(t => {
     const mapped = AUDIT_CAT_MAP[t.cat] || '운영비';
     if (t.type === 'income')  detailIncome[mapped]  += t.amount;
     if (t.type === 'expense') detailExpense[mapped] += t.amount;
@@ -2613,7 +2625,7 @@ function calcAuditData(month) {
   const finance = {};
   banks.forEach(b => {
     finance[b] = {
-      carryover: allTxs.filter(t=>t.bank===b&&t.memo==='이월').reduce((s,t)=>s+t.amount,0),
+      carryover: allTxs.filter(t=>t.bank===b&&(t.memo==='이월'||(t.name&&t.name.includes('이월')))).reduce((s,t)=>s+t.amount,0),
       income:    allTxs.filter(t=>t.bank===b&&t.type==='income'&&t.memo!=='이월').reduce((s,t)=>s+t.amount,0),
       expense:   allTxs.filter(t=>t.bank===b&&t.type==='expense').reduce((s,t)=>s+t.amount,0),
     };
@@ -2629,7 +2641,7 @@ function calcAuditData(month) {
   const detail = {};
   auditRows.forEach(r => { detail[r] = { income:0, expense:0 }; });
   allTxs.forEach(t => {
-    if(t.type==='income' && t.memo!=='이월') {
+    if(t.type==='income' && t.memo!=='이월' && !(t.name&&t.name.includes('이월'))) {
       const cat = AUDIT_CAT_MAP[t.cat];
       if(cat && detail[cat]) detail[cat].income += t.amount;
     } else if(t.type==='expense') {
@@ -2803,7 +2815,13 @@ function getAllMembers() {
     .map(m => {
       const ov = customById.get(m.name);
       if(!ov) return m;
-      return Object.assign({}, m, ov);
+      const merged = Object.assign({}, m, ov);
+      // type이 원본과 달라졌으면 원본 type 유지 (실수로 덮어씌워지는 것 방지)
+      // 단, 관리자가 명시적으로 변경한 경우(_typeChanged:true)는 허용
+      if(ov.type && ov.type !== m.type && !ov._typeChanged) {
+        merged.type = m.type;
+      }
+      return merged;
     });
 
   // 2) 순수 신규 (_id가 'new_'로 시작, 삭제 안 된 것)
@@ -3081,10 +3099,15 @@ function saveNewMember() {
     const prev협회비  = nm협회비 !== null ? nm협회비
                      : (prevData['협회비'] ?? false);
 
+    // 원본 회원의 type과 다르면 _typeChanged 플래그 → getAllMembers에서 type 보호 우회
+    const origMember = MEMBERS.find(m => m.name === editId);
+    const typeChanged = origMember && origMember.type !== data.type;
+
     const saved = Object.assign({}, data, {
-      _id:     editId,
-      months:  prevMonths,
-      '협회비': prev협회비,
+      _id:          editId,
+      months:       prevMonths,
+      '협회비':      prev협회비,
+      _typeChanged: typeChanged ? true : undefined,
     });
 
     if(existIdx >= 0) custom[existIdx] = saved;
@@ -3268,7 +3291,12 @@ function selectCsvBank(bank, btn) {
   document.getElementById('csvResultCard').style.display = 'none';
 }
 
-function renderCsvTab() { /* 탭 전환 시 초기화 필요 없음 */ }
+function renderCsvTab() {
+  // CSV 탭 진입 시 현재 csvBank에 맞게 active 버튼 복원
+  document.querySelectorAll('[id^="csvBank-"]').forEach(b => b.classList.remove('active'));
+  const activeBtn = document.getElementById('csvBank-' + csvBank);
+  if(activeBtn) activeBtn.classList.add('active');
+}
 
 function handleCsvDrop(e) {
   e.preventDefault();
@@ -3525,8 +3553,13 @@ function saveTxEdit() {
 
   closeTxEditModal();
   showToast('✅ 수정 완료!');
+  // 수정된 거래의 월로 드롭다운 재구성
+  buildMonthOptions('incomeMonthSel', incomeSelectedMonth);
+  buildMonthOptions('expenseMonthSel', expenseSelectedMonth);
+  buildMonthOptions('reportMonthSel', reportSelectedMonth);
   renderIncomeTx();
   renderExpenseTx();
+  renderReport(reportBank);
   renderHome();
 }
 
@@ -3538,8 +3571,12 @@ function deleteTx(id) {
   sbDelete('transactions', `id=eq.${encodeURIComponent(id)}`).catch(e => console.warn('[SB] TX 삭제 실패:', e));
   recalcBalance();
   showToast('🗑️ 삭제 완료');
+  buildMonthOptions('incomeMonthSel', incomeSelectedMonth);
+  buildMonthOptions('expenseMonthSel', expenseSelectedMonth);
+  buildMonthOptions('reportMonthSel', reportSelectedMonth);
   renderIncomeTx();
   renderExpenseTx();
+  renderReport(reportBank);
   renderHome();
 }
 
